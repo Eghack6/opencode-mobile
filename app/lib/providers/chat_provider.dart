@@ -697,6 +697,8 @@ class ChatProvider extends ChangeNotifier {
     _generationTimers[sessionId]?.cancel();
     _generationTimers.remove(sessionId);
     _streamingMessages.remove(sessionId);
+    // Cancel the pending HTTP request immediately so the UI updates right away
+    _api.cancelPendingRequest();
     try {
       await _api.abortSession(sessionId);
     } catch (_) {}

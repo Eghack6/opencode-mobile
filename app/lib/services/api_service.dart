@@ -29,6 +29,7 @@ class ApiService {
   bool _debug = false;
   final List<ApiLogEntry> _logs = [];
   static const int _maxLogs = 200;
+  http.Client? _activeClient;
 
   static final ApiService _instance = ApiService._();
   factory ApiService() => _instance;
@@ -220,6 +221,7 @@ class ApiService {
     final bodyStr = jsonEncode(body);
     _log('POST', uri.toString(), body: bodyStr);
     final client = http.Client();
+    _activeClient = client;
     try {
       final request = http.Request('POST', uri);
       request.headers.addAll(_headers);
@@ -241,8 +243,15 @@ class ApiService {
           responseBody.isNotEmpty ? responseBody : 'Status ${streamedResponse.statusCode}';
       throw Exception('Failed to send message: $errMsg');
     } finally {
+      _activeClient = null;
       client.close();
     }
+  }
+
+  /// Cancel the pending sendMessage HTTP request immediately.
+  void cancelPendingRequest() {
+    _activeClient?.close();
+    _activeClient = null;
   }
 
   Future<bool> abortSession(String sessionId) async {
