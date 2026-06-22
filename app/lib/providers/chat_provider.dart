@@ -59,7 +59,7 @@ class ChatProvider extends ChangeNotifier {
   List<Session> get sessions => _sessions;
   Session? get currentSession => _currentSession;
   List<Message> get messages =>
-      _currentSession != null ? (_sessionMessages[_currentSession!.id] ??= []) : [];
+      _currentSession != null ? (_sessionMessages[_currentSession!.id] ?? []) : [];
   bool get isLoading => _isLoading;
   bool get isConnected => _isConnected;
   bool get isGenerating =>

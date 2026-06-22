@@ -68,9 +68,15 @@ class _ChatScreenState extends State<ChatScreen> {
     return indices;
   }
 
+  bool _scrollPending = false;
+
   void _updatePairFromScroll(double offset) {
-    final provider = context.read<ChatProvider>();
-    final msgs = provider.messages;
+    if (_scrollPending) return;
+    _scrollPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollPending = false;
+    });
+    final msgs = context.read<ChatProvider>().messages;
     if (msgs.isEmpty) return;
     final avgH = 80.0;
     final idx = (offset / avgH).round().clamp(0, msgs.length - 1);
@@ -92,6 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final msgs = provider.messages;
     final indices = _userPairIndices;
     if (pairIndex >= indices.length || msgs.length <= 1) return;
+    if (!_scrollController.hasClients) return;
     _autoScroll = false;
     final maxExtent = _scrollController.position.maxScrollExtent;
     if (pairIndex == indices.length - 1) {
@@ -106,23 +113,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _checkFirstRunAndInit() async {
-    final prefs = await SharedPreferences.getInstance();
-    final hasRun = prefs.getBool('has_run_before') ?? false;
-    if (!hasRun && mounted) {
-      final result = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      );
-      await prefs.setBool('has_run_before', true);
-      if (result == true) {
-        if (!mounted) return;
-        Navigator.push(
-            context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasRun = prefs.getBool('has_run_before') ?? false;
+      if (!hasRun && mounted) {
+        final result = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        );
+        await prefs.setBool('has_run_before', true);
+        if (result == true) {
+          if (!mounted) return;
+          Navigator.push(
+              context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+        }
       }
-    }
-    if (mounted) {
-      context.read<ChatProvider>().init();
-    }
+      if (mounted) {
+        context.read<ChatProvider>().init();
+      }
+    } catch (_) {}
   }
 
   void _showModelPicker(ChatProvider provider) {

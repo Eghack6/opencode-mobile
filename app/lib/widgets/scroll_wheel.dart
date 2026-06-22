@@ -48,6 +48,7 @@ class _ScrollWheelState extends State<ScrollWheel> {
   Widget build(BuildContext context) {
     final total = widget.itemCount;
     if (total <= 1) return const SizedBox(width: _wheelWidth);
+    if (_displayIndex >= total) _displayIndex = total - 1;
 
     final totalHeight = total * _lineHeight + (total - 1) * _lineSpacing;
 

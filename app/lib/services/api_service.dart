@@ -93,7 +93,7 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/session');
     _log('GET', uri.toString());
     try {
-      final response = await http.get(uri, headers: _headers);
+      final response = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
       _log('GET', uri.toString(), status: response.statusCode, response: response.body);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -114,7 +114,7 @@ class ApiService {
     final bodyStr = jsonEncode(body);
     _log('POST', uri.toString(), body: bodyStr);
     try {
-      final response = await http.post(uri, headers: _headers, body: bodyStr);
+      final response = await http.post(uri, headers: _headers, body: bodyStr).timeout(const Duration(seconds: 10));
       _log('POST', uri.toString(), status: response.statusCode, response: response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
         return Session.fromJson(jsonDecode(response.body));
@@ -130,7 +130,7 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/session/$id');
     _log('GET', uri.toString());
     try {
-      final response = await http.get(uri, headers: _headers);
+      final response = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
       _log('GET', uri.toString(), status: response.statusCode, response: response.body);
       if (response.statusCode == 200) {
         return Session.fromJson(jsonDecode(response.body));
@@ -146,7 +146,7 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/session/$id');
     _log('DELETE', uri.toString());
     try {
-      final response = await http.delete(uri, headers: _headers);
+      final response = await http.delete(uri, headers: _headers).timeout(const Duration(seconds: 10));
       _log('DELETE', uri.toString(), status: response.statusCode, response: response.body);
       return response.statusCode == 200;
     } catch (e) {
@@ -163,7 +163,7 @@ class ApiService {
     final uri = Uri.parse(uriStr);
     _log('GET', uri.toString());
     try {
-      final response = await http.get(uri, headers: _headers);
+      final response = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 15));
       _log('GET', uri.toString(), status: response.statusCode, response: response.body);
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -185,7 +185,7 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/provider');
     _log('GET', uri.toString());
     try {
-      final response = await http.get(uri, headers: _headers);
+      final response = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
       _log('GET', uri.toString(), status: response.statusCode, response: response.body);
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
@@ -249,7 +249,7 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/session/$sessionId/abort');
     _log('POST', uri.toString());
     try {
-      final response = await http.post(uri, headers: _headers);
+      final response = await http.post(uri, headers: _headers).timeout(const Duration(seconds: 10));
       _log('POST', uri.toString(), status: response.statusCode, response: response.body);
       return response.statusCode == 200;
     } catch (e) {

@@ -215,6 +215,11 @@ class SshTunnelService {
 
   void _forwardTunnel(Socket localSocket) async {
     _localSockets.add(localSocket);
+    if (_client == null) {
+      try { localSocket.destroy(); } catch (_) {}
+      _localSockets.remove(localSocket);
+      return;
+    }
     try {
       final forward = await _client!.forwardLocal(
         config!.remoteHost,
