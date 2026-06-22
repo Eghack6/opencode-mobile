@@ -1023,34 +1023,57 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
   }
 
   Widget _buildScrollToBottomFAB(ThemeData theme) {
-    return FloatingActionButton.small(
-      heroTag: 'scrollToBottom',
-      backgroundColor: Colors.white.withOpacity(0.85),
-      onPressed: () {
-        _autoScroll = true;
-        _unreadCount = 0;
-        _isAtBottom = true;
-        setState(() {});
-        _scrollToLastItem();
-      },
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.arrow_downward, color: Colors.grey[700]),
-          if (_unreadCount > 0)
-            Positioned(
-              right: -2,
-              top: -2,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-              ),
+    final isDark = theme.brightness == Brightness.dark;
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDark
+                ? Colors.black.withOpacity(0.2)
+                : Colors.white.withOpacity(0.3),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.06),
+              width: 1,
             ),
-        ],
+          ),
+          child: GestureDetector(
+            onTap: () {
+              _autoScroll = true;
+              _unreadCount = 0;
+              _isAtBottom = true;
+              setState(() {});
+              _scrollToLastItem();
+            },
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Icon(Icons.arrow_downward,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                if (_unreadCount > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

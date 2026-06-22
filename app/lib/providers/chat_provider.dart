@@ -46,6 +46,7 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, Timer> _generationTimers = {};
   final Map<String, _FailedMessage> _sessionFailedMessages = {};
   final Set<String> _generationDone = {};
+  final Set<String> _abortedSessions = {};
 
   StreamSubscription? _eventSubscription;
   StreamSubscription? _sshStatusSubscription;
@@ -429,14 +430,16 @@ class ChatProvider extends ChangeNotifier {
   Future<void> _refreshMessagesFor(String sessionId) async {
     try {
       final msgs = await _api.listMessages(sessionId);
+      // Filter out empty assistant messages (e.g. from aborted generations)
+      final filtered = msgs.where((m) => !m.isAssistant || m.textContent.trim().isNotEmpty).toList();
       final hasStreaming = _streamingMessages.containsKey(sessionId);
       if (!hasStreaming) {
-        _sessionMessages[sessionId] = msgs;
+        _sessionMessages[sessionId] = filtered;
       } else {
         // Merge: keep streaming message at end
         final streaming = _streamingMessages[sessionId]!;
-        final filtered = msgs.where((m) => m.id != streaming.id).toList();
-        _sessionMessages[sessionId] = [...filtered, streaming];
+        final withoutStreaming = filtered.where((m) => m.id != streaming.id).toList();
+        _sessionMessages[sessionId] = [...withoutStreaming, streaming];
       }
       if (_currentSession?.id == sessionId) {
         notifyListeners();
@@ -588,6 +591,14 @@ class ChatProvider extends ChangeNotifier {
       _generatingSessions.remove(sessionId);
       _generationTimers[sessionId]?.cancel();
       _generationTimers.remove(sessionId);
+      // If the user intentionally aborted, don't show error or failed message
+      if (_abortedSessions.remove(sessionId)) {
+        _log('  aborted by user, skipping error');
+        if (_currentSession?.id == sessionId) {
+          notifyListeners();
+        }
+        return;
+      }
       _error = e.toString();
       _sessionFailedMessages[sessionId] = _FailedMessage(text, DateTime.now());
       if (_currentSession?.id == sessionId) {
@@ -697,6 +708,7 @@ class ChatProvider extends ChangeNotifier {
     _generationTimers[sessionId]?.cancel();
     _generationTimers.remove(sessionId);
     _streamingMessages.remove(sessionId);
+    _abortedSessions.add(sessionId);
     // Cancel the pending HTTP request immediately so the UI updates right away
     _api.cancelPendingRequest();
     try {
