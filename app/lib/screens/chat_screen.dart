@@ -639,12 +639,17 @@ class _ChatScreenState extends State<ChatScreen> {
             api.setDebug(!api.debug);
             if (mounted) setState(() {});
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.showMaterialBanner(
+                MaterialBanner(
                   content: Text(api.debug ? '调试模式已开启' : '调试模式已关闭'),
-                  duration: const Duration(seconds: 1),
+                  backgroundColor: Colors.black87,
+                  actions: const [SizedBox.shrink()],
                 ),
               );
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted) messenger.hideCurrentMaterialBanner();
+              });
             }
           },
           child: Consumer<ChatProvider>(
@@ -1057,12 +1062,17 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _connectLocal(ChatProvider provider) async {
     final ok = await provider.connect('http://localhost:4096');
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showMaterialBanner(
+        MaterialBanner(
           content: Text(ok ? '连接成功！' : '连接失败'),
           backgroundColor: ok ? Colors.green : Colors.red,
+          actions: const [SizedBox.shrink()],
         ),
       );
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) messenger.hideCurrentMaterialBanner();
+      });
     }
   }
 
