@@ -42,7 +42,6 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, List<Message>> _sessionMessages = {};
   final Set<String> _generatingSessions = {};
   final Map<String, Message> _streamingMessages = {};
-  final Map<String, Timer> _pollTimers = {};
   final Map<String, Timer> _generationTimers = {};
   final Map<String, _FailedMessage> _sessionFailedMessages = {};
   final Set<String> _generationDone = {};
@@ -374,8 +373,6 @@ class ChatProvider extends ChangeNotifier {
           _generatingSessions.remove(doneSessionId);
           _generationTimers[doneSessionId]?.cancel();
           _generationTimers.remove(doneSessionId);
-          _pollTimers[doneSessionId]?.cancel();
-          _pollTimers.remove(doneSessionId);
           // Refresh the session's messages from API
           _refreshMessagesFor(doneSessionId);
         }
@@ -394,8 +391,6 @@ class ChatProvider extends ChangeNotifier {
           _generatingSessions.remove(errSessionId);
           _generationTimers[errSessionId]?.cancel();
           _generationTimers.remove(errSessionId);
-          _pollTimers[errSessionId]?.cancel();
-          _pollTimers.remove(errSessionId);
           final errorData = event.data['error'] as Map<String, dynamic>?;
           if (errorData != null) {
             _error = errorData['message'] as String? ?? 'Session error';
@@ -404,7 +399,8 @@ class ChatProvider extends ChangeNotifier {
         notifyListeners();
         break;
       case EventType.sessionStatus:
-        notifyListeners();
+      case EventType.toolStart:
+      case EventType.toolDone:
         break;
       case EventType.sessionUpdated:
         final info = event.data['info'] as Map<String, dynamic>?;
@@ -417,11 +413,6 @@ class ChatProvider extends ChangeNotifier {
           if (idx >= 0) _sessions[idx] = updated;
           notifyListeners();
         }
-        break;
-      case EventType.toolStart:
-        break;
-      case EventType.toolDone:
-        notifyListeners();
         break;
       default:
         break;
@@ -448,34 +439,11 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  void _startPollingFor(String sessionId) {
-    _pollTimers[sessionId]?.cancel();
-    _pollTimers[sessionId] = Timer.periodic(const Duration(seconds: 2), (_) => _pollMessagesFor(sessionId));
-  }
-
-  void _stopPollingFor(String sessionId) {
-    _pollTimers[sessionId]?.cancel();
-    _pollTimers.remove(sessionId);
-  }
-
-  Future<void> _pollMessagesFor(String sessionId) async {
-    if (!_generatingSessions.contains(sessionId)) return;
-    try {
-      final msgs = await _api.listMessages(sessionId, limit: 5);
-      if (msgs.isEmpty) return;
-      final last = msgs.last;
-      if (last.role == 'assistant') {
-        // No-op for now, just keeping polling alive
-      }
-    } catch (_) {}
-  }
-
   Future<void> _finishGenerationFor(String sessionId) async {
     _generatingSessions.remove(sessionId);
     _streamingMessages.remove(sessionId);
     _generationTimers[sessionId]?.cancel();
     _generationTimers.remove(sessionId);
-    _stopPollingFor(sessionId);
     await _refreshMessagesFor(sessionId);
   }
 
@@ -558,13 +526,11 @@ class ChatProvider extends ChangeNotifier {
 
     // Add to this session's message list
     _sessionMessages.putIfAbsent(sessionId, () => []);
-    _sessionMessages[sessionId] = [...?_sessionMessages[sessionId], userMsg];
+    _sessionMessages[sessionId] = [..._sessionMessages[sessionId]!, userMsg];
     _generatingSessions.add(sessionId);
     _generationDone.remove(sessionId);
     _log('  local msg added, msgs=${_sessionMessages[sessionId]?.length}, generating=true');
     notifyListeners();
-
-    _startPollingFor(sessionId);
 
     _generationTimers[sessionId]?.cancel();
     _generationTimers[sessionId] = Timer(const Duration(seconds: 120), () async {
@@ -590,7 +556,6 @@ class ChatProvider extends ChangeNotifier {
       _generatingSessions.remove(sessionId);
       _generationTimers[sessionId]?.cancel();
       _generationTimers.remove(sessionId);
-      _stopPollingFor(sessionId);
 
       if (responseMsg.isUser) {
         // Replace the local user message with server version
@@ -615,7 +580,6 @@ class ChatProvider extends ChangeNotifier {
       _generatingSessions.remove(sessionId);
       _generationTimers[sessionId]?.cancel();
       _generationTimers.remove(sessionId);
-      _stopPollingFor(sessionId);
       _error = e.toString();
       _sessionFailedMessages[sessionId] = _FailedMessage(text, DateTime.now());
       if (_currentSession?.id == sessionId) {
@@ -641,7 +605,6 @@ class ChatProvider extends ChangeNotifier {
       _sessionMessages.remove(id);
       _generatingSessions.remove(id);
       _streamingMessages.remove(id);
-      _pollTimers.remove(id);
       _generationTimers.remove(id);
       _sessionFailedMessages.remove(id);
       if (_currentSession?.id == id) {
@@ -660,6 +623,18 @@ class ChatProvider extends ChangeNotifier {
 
   final Map<String, List<String>> _searchCache = {};
   static const int _searchMaxSessions = 20;
+  static const int _searchCacheMaxSize = 50;
+
+  void _cacheSearchQuery(String query, List<String> ids) {
+    _searchCache[query] = ids;
+    if (_searchCache.length > _searchCacheMaxSize) {
+      final removeCount = _searchCache.length - _searchCacheMaxSize;
+      final keysToRemove = _searchCache.keys.take(removeCount).toList();
+      for (final key in keysToRemove) {
+        _searchCache.remove(key);
+      }
+    }
+  }
 
   Future<List<Session>> searchSessions(String query) async {
     if (query.trim().isEmpty) return _sessions;
@@ -681,7 +656,7 @@ class ChatProvider extends ChangeNotifier {
         !s.id.toLowerCase().contains(lowerQuery)).toList();
 
     if (nonTitleMatches.isEmpty) {
-      _searchCache[lowerQuery] = titleMatches.map((s) => s.id).toList();
+      _cacheSearchQuery(lowerQuery, titleMatches.map((s) => s.id).toList());
       return titleMatches;
     }
 
@@ -699,7 +674,7 @@ class ChatProvider extends ChangeNotifier {
     );
 
     final result = [...titleMatches, ...contentMatches];
-    _searchCache[lowerQuery] = result.map((s) => s.id).toList();
+    _cacheSearchQuery(lowerQuery, result.map((s) => s.id).toList());
     return result;
   }
 
@@ -713,7 +688,6 @@ class ChatProvider extends ChangeNotifier {
     _generatingSessions.remove(sessionId);
     _generationTimers[sessionId]?.cancel();
     _generationTimers.remove(sessionId);
-    _stopPollingFor(sessionId);
     _streamingMessages.remove(sessionId);
     try {
       await _api.abortSession(sessionId);
@@ -723,13 +697,9 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    for (final timer in _pollTimers.values) {
-      timer.cancel();
-    }
     for (final timer in _generationTimers.values) {
       timer.cancel();
     }
-    _pollTimers.clear();
     _generationTimers.clear();
     _eventSubscription?.cancel();
     _sshStatusSubscription?.cancel();
