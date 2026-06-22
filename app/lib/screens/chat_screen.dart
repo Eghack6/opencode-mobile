@@ -77,63 +77,122 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showModelPicker(ChatProvider provider) {
+    final searchController = TextEditingController();
+    ValueNotifier<String> searchQuery = ValueNotifier('');
+
     showModalBottomSheet(
       context: context,
       builder: (context) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
-                  const Text('选择模型',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('完成'),
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final query = searchQuery.value.toLowerCase();
+            final models = provider.availableModels.where((m) {
+              if (query.isEmpty) return true;
+              return m.modelName.toLowerCase().contains(query) ||
+                  m.providerName.toLowerCase().contains(query) ||
+                  m.id.toLowerCase().contains(query);
+            }).toList();
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      const Text('选择模型',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('完成'),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.45,
-              child: ListView.separated(
-                itemCount: provider.availableModels.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, indent: 16),
-                itemBuilder: (context, index) {
-                  final model = provider.availableModels[index];
-                  final isSelected = model.id == provider.selectedModel;
-                  return ListTile(
-                    leading: Icon(
-                      isSelected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      hintText: '搜索模型...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      filled: true,
+                      fillColor: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerLow,
+                      suffixIcon: searchQuery.value.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                searchController.clear();
+                                searchQuery.value = '';
+                                setSheetState(() {});
+                              },
+                            )
                           : null,
                     ),
-                    title: Text(model.modelName,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w500)),
-                    subtitle: Text(model.providerName,
-                        style: const TextStyle(fontSize: 12)),
-                    trailing: Text(model.id.split('/').last,
-                        style:
-                            TextStyle(fontSize: 11, color: Colors.grey[500])),
-                    onTap: () {
-                      provider.setModel(model.id);
-                      Navigator.pop(context);
+                    onChanged: (v) {
+                      searchQuery.value = v;
+                      setSheetState(() {});
                     },
-                  );
-                },
-              ),
-            ),
-          ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Divider(height: 1),
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.4,
+                  child: models.isEmpty
+                      ? Center(
+                          child: Text('没有匹配的模型',
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withOpacity(0.4))))
+                      : ListView.separated(
+                          itemCount: models.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1, indent: 16),
+                          itemBuilder: (context, index) {
+                            final model = models[index];
+                            final isSelected =
+                                model.id == provider.selectedModel;
+                            return ListTile(
+                              leading: Icon(
+                                isSelected
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              title: Text(model.modelName,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500)),
+                              subtitle: Text(model.providerName,
+                                  style: const TextStyle(fontSize: 12)),
+                              trailing: Text(model.id.split('/').last,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[500])),
+                              onTap: () {
+                                provider.setModel(model.id);
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
         );
       },
     );

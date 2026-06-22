@@ -257,10 +257,14 @@ class ChatProvider extends ChangeNotifier {
         }
       }
 
-      // Sort: Opencode Zen models (free) appear at the top
+      // Sort: Opencode provider models first, Zen models at the very top
       models.sort((a, b) {
-        final aIsZen = a.id.contains('zen') || a.modelName.contains('zen');
-        final bIsZen = b.id.contains('zen') || b.modelName.contains('zen');
+        final aIsOpeencode = a.id.startsWith('opencode/');
+        final bIsOpeencode = b.id.startsWith('opencode/');
+        if (aIsOpeencode && !bIsOpeencode) return -1;
+        if (!aIsOpeencode && bIsOpeencode) return 1;
+        final aIsZen = a.modelName.toLowerCase().contains('zen');
+        final bIsZen = b.modelName.toLowerCase().contains('zen');
         if (aIsZen && !bIsZen) return -1;
         if (!aIsZen && bIsZen) return 1;
         return 0;
