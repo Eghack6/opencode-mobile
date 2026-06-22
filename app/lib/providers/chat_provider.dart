@@ -244,7 +244,6 @@ class ChatProvider extends ChangeNotifier {
       for (final provider in all) {
         final p = provider as Map<String, dynamic>;
         final pid = p['id'] as String? ?? '';
-        if (pid != 'opencode') continue;
         final pname = p['name'] as String? ?? pid;
         final pmodels = p['models'] as Map<String, dynamic>? ?? {};
         for (final entry in pmodels.entries) {
@@ -257,6 +256,15 @@ class ChatProvider extends ChangeNotifier {
           ));
         }
       }
+
+      // Sort: Opencode Zen models (free) appear at the top
+      models.sort((a, b) {
+        final aIsZen = a.id.contains('zen') || a.modelName.contains('zen');
+        final bIsZen = b.id.contains('zen') || b.modelName.contains('zen');
+        if (aIsZen && !bIsZen) return -1;
+        if (!aIsZen && bIsZen) return 1;
+        return 0;
+      });
 
       _availableModels = models;
       if (models.isNotEmpty) {
