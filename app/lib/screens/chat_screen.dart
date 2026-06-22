@@ -14,6 +14,8 @@ import '../widgets/toast.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
 
+enum _DeployOption { local, lan, server }
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -33,6 +35,8 @@ class _ChatScreenState extends State<ChatScreen> {
   int _currentPairIndex = 0;
   bool _isAtBottom = true;
   int _messageCount = 0;
+
+  _DeployOption? _deployOption;
 
   @override
   void initState() {
@@ -944,97 +948,22 @@ class _ChatScreenState extends State<ChatScreen> {
                 )),
           ),
           const SizedBox(height: 24),
-          Text('配置指南', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 16),
-          _stepCard(
-            theme: theme,
-            step: '1',
-            title: '安装 Termux',
-            desc: '从 F-Droid 下载 Termux 以获得最佳兼容性。',
-            action: FilledButton.icon(
-              onPressed: () =>
-                  _launchUrl('https://f-droid.org/packages/com.termux/'),
-              icon: const Icon(Icons.open_in_new, size: 18),
-              label: const Text('打开 F-Droid'),
-            ),
-          ),
+          Text('opencode 部署在哪里？', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
-          _stepCard(
-            theme: theme,
-            step: '2',
-            title: '安装 proot-distro 和 Ubuntu',
-            desc: '在 Termux 中运行：',
-            action: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const SelectableText(
-                'pkg install -y proot-distro\nproot-distro install ubuntu',
-                style: TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
+          // 3 deploy options
+          Row(
+            children: [
+              Expanded(child: _deployOptionCard(theme, _DeployOption.local, Icons.phone_android, '本机', '在手机上运行')),
+              const SizedBox(width: 8),
+              Expanded(child: _deployOptionCard(theme, _DeployOption.lan, Icons.computer, '局域网 PC', '在电脑上运行')),
+              const SizedBox(width: 8),
+              Expanded(child: _deployOptionCard(theme, _DeployOption.server, Icons.cloud, '服务器', '远程连接')),
+            ],
           ),
-          const SizedBox(height: 12),
-          _stepCard(
-            theme: theme,
-            step: '3',
-            title: '安装依赖',
-            desc: '在 Ubuntu 中安装 Node.js 和 opencode：',
-            action: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const SelectableText(
-                'proot-distro login ubuntu\napt update && apt install -y nodejs npm\nnpm install -g opencode-ai',
-                style: TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _stepCard(
-            theme: theme,
-            step: '4',
-            title: '启动服务',
-            desc: '保持 Termux 运行，启动 opencode serve：',
-            action: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const SelectableText(
-                'proot-distro login ubuntu -- bash -c\n  \'opencode serve --port 4096 --hostname 0.0.0.0 --cors "*"\'',
-                style: TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _stepCard(
-            theme: theme,
-            step: '5',
-            title: '连接',
-            desc: '点击下方按钮连接：',
-            action: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => _connectLocal(provider),
-                icon: const Icon(Icons.wifi),
-                label: const Text('连接'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: TextButton.icon(
-              onPressed: _openSettings,
-              icon: const Icon(Icons.settings),
-              label: const Text('远程服务器设置'),
-            ),
-          ),
+          const SizedBox(height: 20),
+          // Conditional guide based on selection
+          if (_deployOption != null)
+            _buildDeployGuide(theme, provider),
           if (provider.error != null) ...[
             const SizedBox(height: 16),
             Container(
@@ -1060,6 +989,199 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+  }
+
+  Widget _deployOptionCard(ThemeData theme, _DeployOption option, IconData icon, String title, String subtitle) {
+    final selected = _deployOption == option;
+    return GestureDetector(
+      onTap: () => setState(() => _deployOption = option),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primaryContainer
+              : theme.colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? theme.colorScheme.primary : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 28, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.5)),
+            const SizedBox(height: 6),
+            Text(title,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurface)),
+            Text(subtitle,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withOpacity(0.4))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeployGuide(ThemeData theme, ChatProvider provider) {
+    switch (_deployOption!) {
+      case _DeployOption.local:
+        return Column(
+          children: [
+            _stepCard(
+              theme: theme,
+              step: '1',
+              title: '安装 Termux',
+              desc: '从 F-Droid 下载 Termux 以获得最佳兼容性。',
+              action: FilledButton.icon(
+                onPressed: () =>
+                    _launchUrl('https://f-droid.org/packages/com.termux/'),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('打开 F-Droid'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _stepCard(
+              theme: theme,
+              step: '2',
+              title: '安装 proot-distro 和 Ubuntu',
+              desc: '在 Termux 中运行：',
+              action: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const SelectableText(
+                  'pkg install -y proot-distro\nproot-distro install ubuntu',
+                  style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _stepCard(
+              theme: theme,
+              step: '3',
+              title: '安装依赖',
+              desc: '在 Ubuntu 中安装 Node.js 和 opencode：',
+              action: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const SelectableText(
+                  'proot-distro login ubuntu\napt update && apt install -y nodejs npm\nnpm install -g opencode-ai',
+                  style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _stepCard(
+              theme: theme,
+              step: '4',
+              title: '启动服务',
+              desc: '保持 Termux 运行，启动 opencode serve：',
+              action: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const SelectableText(
+                  'proot-distro login ubuntu -- bash -c\n  \'opencode serve --port 4096 --hostname 0.0.0.0 --cors "*"\'',
+                  style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _connectLocal(provider),
+                icon: const Icon(Icons.wifi),
+                label: const Text('一键连接'),
+              ),
+            ),
+          ],
+        );
+      case _DeployOption.lan:
+        return Column(
+          children: [
+            _stepCard(
+              theme: theme,
+              step: '1',
+              title: '在电脑上启动 opencode',
+              desc: '在电脑终端中运行：',
+              action: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const SelectableText(
+                  'opencode serve --port 4096 --hostname 0.0.0.0 --cors "*"',
+                  style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _stepCard(
+              theme: theme,
+              step: '2',
+              title: '在设置中输入电脑 IP',
+              desc: '确保手机和电脑在同一局域网内。在设置页面输入电脑的局域网 IP 地址。',
+              action: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _openSettings,
+                  icon: const Icon(Icons.settings),
+                  label: const Text('打开设置'),
+                ),
+              ),
+            ),
+          ],
+        );
+      case _DeployOption.server:
+        return Column(
+          children: [
+            _stepCard(
+              theme: theme,
+              step: '1',
+              title: '配置 SSH 连接',
+              desc: '在设置页面填写 SSH 服务器信息（主机、端口、用户名、密码或私钥）。',
+              action: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _openSettings,
+                  icon: const Icon(Icons.settings),
+                  label: const Text('打开设置'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _stepCard(
+              theme: theme,
+              step: '2',
+              title: '启用 SSH 隧道',
+              desc: '在设置页面开启「使用 SSH 隧道」开关，应用将通过加密隧道连接到远程服务器。',
+              action: const Padding(
+                padding: EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(Icons.vpn_lock, size: 18, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('SSH 隧道加密所有通信流量', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+    }
   }
 
   Future<void> _connectLocal(ChatProvider provider) async {
@@ -1269,7 +1391,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _OnboardingPage(
         icon: Icons.phone_android,
         title: 'OpenCode Mobile',
-        description: '将 AI 编程助手带到你的手机上。与智能代理对话，读取、编写和分析代码。',
+        description: '将AI助手带到你的手机上，还能帮你管理远程服务器。',
         color: theme.colorScheme.primary,
       ),
       const _OnboardingPage(
