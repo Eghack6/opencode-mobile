@@ -551,8 +551,7 @@ class _MessageBubbleState extends State<MessageBubble>
           fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
           color: textColor,
         ),
-        textAlign: align,
-        child: _parseInlineMarkdown(text, theme, textColor),
+        child: _parseInlineMarkdown(text, theme, textColor, align: align),
       ),
     );
   }
@@ -568,7 +567,7 @@ class _MessageBubbleState extends State<MessageBubble>
     }
   }
 
-  Widget _parseInlineMarkdown(String text, ThemeData theme, Color textColor) {
+  Widget _parseInlineMarkdown(String text, ThemeData theme, Color textColor, {TextAlign? align}) {
     final spans = <InlineSpan>[];
     final isDark = theme.brightness == Brightness.dark;
 
@@ -685,6 +684,7 @@ class _MessageBubbleState extends State<MessageBubble>
     }
 
     return RichText(
+      textAlign: align ?? TextAlign.start,
       text: TextSpan(
         children: spans,
         style: TextStyle(fontSize: 14, height: 1.45, color: textColor),
