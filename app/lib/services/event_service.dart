@@ -116,7 +116,7 @@ class EventService {
       }
 
       final mappedType = _mapEventType(resolvedType);
-      final preview = rawData.length > 100 ? rawData.substring(0, 100) + '...' : rawData;
+      final preview = rawData.length > 100 ? '${rawData.substring(0, 100)}...' : rawData;
       _logSse('EVENT: "$eventType" -> "$resolvedType" (mapped: $mappedType) data=$preview');
 
       _controller.add(SseEvent(

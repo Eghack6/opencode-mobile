@@ -50,8 +50,6 @@ class _ScrollWheelState extends State<ScrollWheel> {
     if (total <= 1) return const SizedBox(width: _wheelWidth);
     if (_displayIndex >= total) _displayIndex = total - 1;
 
-    final totalHeight = total * _lineHeight + (total - 1) * _lineSpacing;
-
     return GestureDetector(
       onVerticalDragStart: (_) {
         _isDragging = true;

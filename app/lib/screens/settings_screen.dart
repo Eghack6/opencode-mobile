@@ -585,8 +585,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       showToast(context, '请填写 SSH 主机、用户名和密码或私钥', bgColor: Colors.red);
       return;
     }
-    await config.save();
     final provider = context.read<ChatProvider>();
+    await config.save();
     final connected = await provider.connect('');
     if (!mounted) return;
     showToast(context,

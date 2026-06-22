@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/chat_provider.dart';
 import 'screens/chat_screen.dart';
-import 'screens/settings_screen.dart';
 import 'services/theme_provider.dart';
 
 class OpenCodeMobileApp extends StatefulWidget {

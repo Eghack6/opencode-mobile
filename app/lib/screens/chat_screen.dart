@@ -732,9 +732,9 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: _openSettings,
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(0),
-          child: const SizedBox.shrink(),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(0),
+          child: SizedBox.shrink(),
         ),
       ),
       body: Consumer<ChatProvider>(
@@ -1272,13 +1272,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         description: '将 AI 编程助手带到你的手机上。与智能代理对话，读取、编写和分析代码。',
         color: theme.colorScheme.primary,
       ),
-      _OnboardingPage(
+      const _OnboardingPage(
         icon: Icons.wifi,
         title: '多种连接方式',
         description: '连接到任意 opencode serve 实例——本地 Termux、局域网电脑或远程服务器。',
         color: Colors.green,
       ),
-      _OnboardingPage(
+      const _OnboardingPage(
         icon: Icons.vpn_lock,
         title: 'SSH 安全隧道',
         description: '通过 SSH 隧道加密所有通信流量，保障数据安全。',
