@@ -32,7 +32,6 @@ class _ChatScreenState extends State<ChatScreen> {
   int _currentPairIndex = 0;
   bool _isAtBottom = true;
   int _messageCount = 0;
-  bool _scrollReady = true;
 
   @override
   void initState() {
@@ -734,31 +733,17 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Consumer<ChatProvider>(
         builder: (context, provider, _) {
-          // Provider may not be ready yet
-          final msgs = provider.messages;
-          _messageCount = msgs.length;
-          _userPairIndices = _getUserIndices(msgs);
+          // Loading state for session switching
+          if (provider.isLoading && provider.currentSession == null && provider.sessions.isNotEmpty) {
+            return _buildLoadingIndicator(theme);
+          }
 
-          // Session switch detection
           if (_lastSessionId != provider.currentSession?.id) {
             _lastSessionId = provider.currentSession?.id;
             _lastContentLength = 0;
             _autoScroll = true;
             _isAtBottom = true;
-            _scrollReady = false;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              _scrollToLastItem(animate: false);
-              _scrollReady = true;
-              setState(() {});
-            });
           }
-
-          // Loading state: either provider loading or scroll not ready
-          if ((provider.isLoading && provider.currentSession == null && provider.sessions.isNotEmpty) || !_scrollReady) {
-            return _buildLoadingIndicator(theme);
-          }
-
           if (_autoScroll && provider.messages.isNotEmpty) {
             final curContentLen = provider.messages.last.textContent.length;
             if (_lastContentLength != curContentLen) {
@@ -781,6 +766,9 @@ class _ChatScreenState extends State<ChatScreen> {
           if (!provider.isConnected) {
             return _buildSetupGuide(theme, provider);
           }
+          final msgs = provider.messages;
+          _messageCount = msgs.length;
+          _userPairIndices = _getUserIndices(msgs);
           return Column(
             children: [
               if (provider.error != null && msgs.isNotEmpty)
@@ -800,6 +788,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                     itemPositionsListener: _itemPositionsListener,
                                     padding: const EdgeInsets.symmetric(vertical: 6),
                                     itemCount: msgs.length,
+                                    initialScrollIndex: msgs.length > 1 ? msgs.length - 2 : 0,
+                                    initialAlignment: 0,
                                     physics: const ClampingScrollPhysics(),
                                     itemBuilder: (context, index) {
                                       return MessageBubble(
