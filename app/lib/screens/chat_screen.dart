@@ -638,7 +638,7 @@ class _ChatScreenState extends State<ChatScreen> {
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => Positioned(
-        top: MediaQuery.of(context).padding.top + 8,
+        top: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
         left: 8,
         right: 8,
         child: Material(
@@ -646,7 +646,7 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: bgColor ?? Colors.black87,
+              color: bgColor ?? Colors.green,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(message,

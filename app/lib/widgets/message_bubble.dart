@@ -161,7 +161,7 @@ class _MessageBubbleState extends State<MessageBubble>
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => Positioned(
-        top: MediaQuery.of(context).padding.top + 8,
+        top: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
         left: 8,
         right: 8,
         child: Material(
@@ -169,7 +169,7 @@ class _MessageBubbleState extends State<MessageBubble>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.black87,
+              color: Colors.green,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text('已复制到剪贴板',
