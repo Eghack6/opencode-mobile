@@ -90,9 +90,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _scrollToLastItem({bool animate = true}) {
     if (_messageCount == 0) return;
     _programmaticScroll = true;
-    // Scroll to second-to-last item (user message in last pair) so that
-    // the AI response is visible below it, showing the full end of conversation.
-    final target = _messageCount > 1 ? _messageCount - 2 : 0;
+    final target = _messageCount - 1;
     if (animate) {
       _itemScrollController.scrollTo(
         index: target,

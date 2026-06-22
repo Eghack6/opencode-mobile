@@ -105,39 +105,41 @@ class _MessageBubbleState extends State<MessageBubble>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ..._buildParts(context, theme, isUser),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: GestureDetector(
-                          onTap: () {
-                            Clipboard.setData(
-                                ClipboardData(text: widget.message.textContent));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('已复制到剪贴板'),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Icon(Icons.copy, size: 13,
-                                color: isUser
-                                    ? Colors.white.withOpacity(0.5)
-                                    : theme.colorScheme.onSurface.withOpacity(0.25)),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
-                  child: Text(
-                    _formatTime(widget.message.createdAt),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: theme.colorScheme.onSurface.withOpacity(0.3),
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(
+                              ClipboardData(text: widget.message.textContent));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('已复制到剪贴板'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(Icons.copy, size: 11,
+                              color: isUser
+                                  ? Colors.white.withOpacity(0.5)
+                                  : theme.colorScheme.onSurface.withOpacity(0.25)),
+                        ),
+                      ),
+                      Text(
+                        _formatTime(widget.message.createdAt),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurface.withOpacity(0.3),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
