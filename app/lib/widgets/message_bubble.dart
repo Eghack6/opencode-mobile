@@ -513,37 +513,40 @@ class _MessageBubbleState extends State<MessageBubble>
     final borderColor = textColor.withOpacity(0.2);
     final headerBg = textColor.withOpacity(0.08);
 
-    return Table(
-      border: TableBorder.all(color: borderColor, width: 0.5),
-      columnWidths: {
-        for (int i = 0; i < colCount; i++)
-          i: const FlexColumnWidth(1),
-      },
-      children: [
-        // Header row
-        TableRow(
-          decoration: BoxDecoration(color: headerBg),
-          children: headers.map((h) => _tableCell(h.trim(), true, theme, textColor)).toList(),
-        ),
-        // Body rows
-        for (int r = 2; r < rows.length; r++)
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        border: TableBorder.all(color: borderColor, width: 0.5),
+        columnWidths: {
+          for (int i = 0; i < colCount; i++)
+            i: const IntrinsicColumnWidth(),
+        },
+        children: [
+          // Header row
           TableRow(
-            children: rows[r]
-                .split('|')
-                .where((s) => s.isNotEmpty)
-                .toList()
-                .asMap()
-                .entries
-                .map((e) => _tableCell(
-                      e.value.trim(),
-                      false,
-                      theme,
-                      textColor,
-                      align: e.key < alignments.length ? alignments[e.key] : TextAlign.left,
-                    ))
-                .toList(),
+            decoration: BoxDecoration(color: headerBg),
+            children: headers.map((h) => _tableCell(h.trim(), true, theme, textColor)).toList(),
           ),
-      ],
+          // Body rows
+          for (int r = 2; r < rows.length; r++)
+            TableRow(
+              children: rows[r]
+                  .split('|')
+                  .where((s) => s.isNotEmpty)
+                  .toList()
+                  .asMap()
+                  .entries
+                  .map((e) => _tableCell(
+                        e.value.trim(),
+                        false,
+                        theme,
+                        textColor,
+                        align: e.key < alignments.length ? alignments[e.key] : TextAlign.left,
+                      ))
+                  .toList(),
+            ),
+        ],
+      ),
     );
   }
 
