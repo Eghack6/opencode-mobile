@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/message.dart';
 import '../models/part.dart';
 import '../providers/chat_provider.dart';
@@ -425,6 +426,12 @@ class _MessageBubbleState extends State<MessageBubble>
           ),
         ));
       } else if (line.startsWith('> ')) {
+        // Collect consecutive blockquote lines
+        final quoteLines = <String>[line.substring(2)];
+        while (i + 1 < lines.length && lines[i + 1].startsWith('> ')) {
+          i++;
+          quoteLines.add(lines[i].substring(2));
+        }
         children.add(WidgetSpan(
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -437,7 +444,10 @@ class _MessageBubbleState extends State<MessageBubble>
                 ),
               ),
             ),
-            child: _parseInlineMarkdown(line.substring(2), theme, textColor),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: quoteLines.map((l) => _parseInlineMarkdown(l, theme, textColor)).toList(),
+            ),
           ),
         ));
       } else {
@@ -494,7 +504,7 @@ class _MessageBubbleState extends State<MessageBubble>
         // Header row
         TableRow(
           decoration: BoxDecoration(color: headerBg),
-          children: headers.map((h) => _tableCell(h.trim(), true, textColor)).toList(),
+          children: headers.map((h) => _tableCell(h.trim(), true, theme, textColor)).toList(),
         ),
         // Body rows
         for (int r = 2; r < rows.length; r++)
@@ -508,6 +518,7 @@ class _MessageBubbleState extends State<MessageBubble>
                 .map((e) => _tableCell(
                       e.value.trim(),
                       false,
+                      theme,
                       textColor,
                       align: e.key < alignments.length ? alignments[e.key] : TextAlign.left,
                     ))
@@ -517,19 +528,30 @@ class _MessageBubbleState extends State<MessageBubble>
     );
   }
 
-  Widget _tableCell(String text, bool isHeader, Color textColor, {TextAlign align = TextAlign.left}) {
+  Widget _tableCell(String text, bool isHeader, ThemeData theme, Color textColor, {TextAlign align = TextAlign.left}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Text(
-        text,
+      child: DefaultTextStyle(
         style: TextStyle(
           fontSize: 13,
           fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
           color: textColor,
         ),
         textAlign: align,
+        child: _parseInlineMarkdown(text, theme, textColor),
       ),
     );
+  }
+
+  int _matchLen(String type, String content, String? url) {
+    switch (type) {
+      case 'bold': return content.length + 4;
+      case 'italic': return content.length + 2;
+      case 'code': return content.length + 2;
+      case 'strike': return content.length + 4;
+      case 'link': return content.length + (url?.length ?? 0) + 4;
+      default: return content.length;
+    }
   }
 
   Widget _parseInlineMarkdown(String text, ThemeData theme, Color textColor) {
@@ -539,24 +561,30 @@ class _MessageBubbleState extends State<MessageBubble>
     final bold = RegExp(r'\*\*(.+?)\*\*');
     final italic = RegExp(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)');
     final inlineCode = RegExp(r'`(.+?)`');
+    final strike = RegExp(r'~~(.+?)~~');
+    final link = RegExp(r'\[([^\]]+)\]\(([^)]+)\)');
 
     String remaining = text;
     while (remaining.isNotEmpty) {
       int earliest = remaining.length;
       String? matchType;
       String? matchContent;
+      String? matchUrl;
       int? matchStart;
 
       for (final entry in [
         {'pattern': bold, 'type': 'bold'},
         {'pattern': italic, 'type': 'italic'},
         {'pattern': inlineCode, 'type': 'code'},
+        {'pattern': strike, 'type': 'strike'},
+        {'pattern': link, 'type': 'link'},
       ]) {
         final m = (entry['pattern'] as RegExp).firstMatch(remaining);
         if (m != null && m.start < earliest) {
           earliest = m.start;
           matchType = entry['type'] as String;
           matchContent = m.group(1);
+          matchUrl = m.groupCount >= 2 ? m.group(2) : null;
           matchStart = m.start;
         }
       }
@@ -570,11 +598,7 @@ class _MessageBubbleState extends State<MessageBubble>
         spans.add(TextSpan(text: remaining.substring(0, matchStart)));
       }
 
-      final matchedLen = matchType == 'bold'
-          ? matchContent.length + 4
-          : matchType == 'italic'
-              ? matchContent.length + 2
-              : matchContent.length + 2;
+      final matchedLen = _matchLen(matchType, matchContent, matchUrl);
       final matched =
           remaining.substring(matchStart, matchStart + matchedLen);
       remaining = remaining.substring(matchStart + matched.length);
@@ -590,6 +614,12 @@ class _MessageBubbleState extends State<MessageBubble>
           spans.add(TextSpan(
             text: matchContent,
             style: const TextStyle(fontStyle: FontStyle.italic),
+          ));
+          break;
+        case 'strike':
+          spans.add(TextSpan(
+            text: matchContent,
+            style: const TextStyle(decoration: TextDecoration.lineThrough),
           ));
           break;
         case 'code':
@@ -612,6 +642,26 @@ class _MessageBubbleState extends State<MessageBubble>
                   fontFamily: 'monospace',
                   fontSize: 12.5,
                   color: codeTextColor,
+                ),
+              ),
+            ),
+          ));
+          break;
+        case 'link':
+          spans.add(WidgetSpan(
+            child: GestureDetector(
+              onTap: () async {
+                final uri = Uri.tryParse(matchUrl ?? '');
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
+              child: Text(
+                matchContent,
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  decoration: TextDecoration.underline,
+                  decorationColor: theme.colorScheme.primary,
                 ),
               ),
             ),
