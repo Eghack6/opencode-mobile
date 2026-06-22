@@ -90,7 +90,15 @@ class _ChatScreenState extends State<ChatScreen> {
   void _scrollToLastItem({bool animate = true}) {
     if (_messageCount == 0) return;
     _programmaticScroll = true;
-    final target = _messageCount - 1;
+    final generating = context.read<ChatProvider>().isGenerating;
+    // If generating, scroll to the last item (streaming AI reply).
+    // Otherwise scroll to second-to-last (user message) so the AI response
+    // is visible below it.
+    final target = generating
+        ? _messageCount - 1
+        : _messageCount > 1
+            ? _messageCount - 2
+            : 0;
     if (animate) {
       _itemScrollController.scrollTo(
         index: target,
@@ -626,6 +634,33 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _showToast(BuildContext context, String message, {Color? bgColor}) {
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: 8,
+        right: 8,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: bgColor ?? Colors.black87,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(message,
+                style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+        ),
+      ),
+    );
+    Overlay.of(context).insert(entry);
+    Future.delayed(const Duration(seconds: 1), () {
+      entry.remove();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -639,17 +674,7 @@ class _ChatScreenState extends State<ChatScreen> {
             api.setDebug(!api.debug);
             if (mounted) setState(() {});
             if (mounted) {
-              final messenger = ScaffoldMessenger.of(context);
-              messenger.showMaterialBanner(
-                MaterialBanner(
-                  content: Text(api.debug ? '调试模式已开启' : '调试模式已关闭'),
-                  backgroundColor: Colors.black87,
-                  actions: const [SizedBox.shrink()],
-                ),
-              );
-              Future.delayed(const Duration(seconds: 1), () {
-                if (mounted) messenger.hideCurrentMaterialBanner();
-              });
+              _showToast(context, api.debug ? '调试模式已开启' : '调试模式已关闭');
             }
           },
           child: Consumer<ChatProvider>(
@@ -1062,17 +1087,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _connectLocal(ChatProvider provider) async {
     final ok = await provider.connect('http://localhost:4096');
     if (mounted) {
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showMaterialBanner(
-        MaterialBanner(
-          content: Text(ok ? '连接成功！' : '连接失败'),
-          backgroundColor: ok ? Colors.green : Colors.red,
-          actions: const [SizedBox.shrink()],
-        ),
-      );
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) messenger.hideCurrentMaterialBanner();
-      });
+      _showToast(context, ok ? '连接成功！' : '连接失败',
+          bgColor: ok ? Colors.green : Colors.red);
     }
   }
 

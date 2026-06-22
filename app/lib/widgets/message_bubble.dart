@@ -119,7 +119,7 @@ class _MessageBubbleState extends State<MessageBubble>
                           child: Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: Icon(Icons.copy, size: 11,
-                                color: Colors.white.withOpacity(0.5)),
+                                color: theme.colorScheme.onSurface.withOpacity(0.25)),
                           ),
                         ),
                         Text(
@@ -158,17 +158,29 @@ class _MessageBubbleState extends State<MessageBubble>
   }
 
   void _banner(BuildContext context) {
-    ScaffoldMessenger.of(context).showMaterialBanner(
-      const MaterialBanner(
-        content: Text('已复制到剪贴板'),
-        backgroundColor: Colors.black87,
-        actions: [SizedBox.shrink()],
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: 8,
+        right: 8,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('已复制到剪贴板',
+                style: TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+        ),
       ),
     );
+    Overlay.of(context).insert(entry);
     Future.delayed(const Duration(seconds: 1), () {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-      }
+      entry.remove();
     });
   }
 
