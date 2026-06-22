@@ -788,8 +788,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                     itemPositionsListener: _itemPositionsListener,
                                     padding: const EdgeInsets.symmetric(vertical: 6),
                                     itemCount: msgs.length,
-                                    initialScrollIndex: msgs.length > 1 ? msgs.length - 2 : 0,
-                                    initialAlignment: 0,
                                     physics: const ClampingScrollPhysics(),
                                     itemBuilder: (context, index) {
                                       return MessageBubble(
