@@ -333,6 +333,17 @@ class _MessageBubbleState extends State<MessageBubble>
         }
       }
 
+      // Horizontal rule: ---
+      if (RegExp(r'^-{3,}\s*$').hasMatch(line.trim())) {
+        children.add(WidgetSpan(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Divider(color: textColor.withOpacity(0.25), height: 1),
+          ),
+        ));
+        continue;
+      }
+
       if (line.startsWith('### ')) {
         children.add(WidgetSpan(
           child: SizedBox(
@@ -426,6 +437,9 @@ class _MessageBubbleState extends State<MessageBubble>
           ),
         ));
       } else if (line.startsWith('> ')) {
+        if (children.isNotEmpty) {
+          children.add(const WidgetSpan(child: SizedBox(height: 4)));
+        }
         // Collect consecutive blockquote lines
         final quoteLines = <String>[line.substring(2)];
         while (i + 1 < lines.length && lines[i + 1].startsWith('> ')) {
