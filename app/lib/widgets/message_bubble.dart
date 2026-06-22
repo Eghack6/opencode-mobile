@@ -314,6 +314,24 @@ class _MessageBubbleState extends State<MessageBubble>
         continue;
       }
 
+      // Table: collect consecutive lines starting with |
+      if (line.trimLeft().startsWith('|')) {
+        final tableLines = <String>[line.trimRight()];
+        while (i + 1 < lines.length && lines[i + 1].trimLeft().startsWith('|')) {
+          i++;
+          tableLines.add(lines[i].trimRight());
+        }
+        if (tableLines.length >= 2) {
+          children.add(WidgetSpan(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: _buildTable(tableLines, theme, textColor),
+            ),
+          ));
+          continue;
+        }
+      }
+
       if (line.startsWith('### ')) {
         children.add(WidgetSpan(
           child: SizedBox(
@@ -438,6 +456,78 @@ class _MessageBubbleState extends State<MessageBubble>
         fontSize: 14,
         height: 1.45,
         color: textColor,
+      ),
+    );
+  }
+
+  Widget _buildTable(List<String> rows, ThemeData theme, Color textColor) {
+    // Parse header (row 0)
+    final headers = rows[0].split('|').where((s) => s.isNotEmpty).toList();
+    // Parse alignment from separator (row 1)
+    final alignments = <TextAlign>[];
+    if (rows.length > 1) {
+      final parts = rows[1].split('|').where((s) => s.isNotEmpty).toList();
+      for (final part in parts) {
+        final trimmed = part.trim();
+        if (trimmed.startsWith(':') && trimmed.endsWith(':')) {
+          alignments.add(TextAlign.center);
+        } else if (trimmed.startsWith(':')) {
+          alignments.add(TextAlign.left);
+        } else if (trimmed.endsWith(':')) {
+          alignments.add(TextAlign.right);
+        } else {
+          alignments.add(TextAlign.left);
+        }
+      }
+    }
+    final colCount = headers.length;
+    final borderColor = textColor.withOpacity(0.2);
+    final headerBg = textColor.withOpacity(0.08);
+
+    return Table(
+      border: TableBorder.all(color: borderColor, width: 0.5),
+      columnWidths: {
+        for (int i = 0; i < colCount; i++)
+          i: const FlexColumnWidth(1),
+      },
+      children: [
+        // Header row
+        TableRow(
+          decoration: BoxDecoration(color: headerBg),
+          children: headers.map((h) => _tableCell(h.trim(), true, textColor)).toList(),
+        ),
+        // Body rows
+        for (int r = 2; r < rows.length; r++)
+          TableRow(
+            children: rows[r]
+                .split('|')
+                .where((s) => s.isNotEmpty)
+                .toList()
+                .asMap()
+                .entries
+                .map((e) => _tableCell(
+                      e.value.trim(),
+                      false,
+                      textColor,
+                      align: e.key < alignments.length ? alignments[e.key] : TextAlign.left,
+                    ))
+                .toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _tableCell(String text, bool isHeader, Color textColor, {TextAlign align = TextAlign.left}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
+          color: textColor,
+        ),
+        textAlign: align,
       ),
     );
   }
