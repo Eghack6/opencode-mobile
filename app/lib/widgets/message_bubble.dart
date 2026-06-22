@@ -206,7 +206,7 @@ class _MessageBubbleState extends State<MessageBubble>
       } else if (part.isCode) {
         widgets.add(CodeBlock(code: part.content, language: part.language));
       } else if (part.isToolCall) {
-        widgets.add(_buildToolCall(part, theme, isUser));
+        // tool call is not useful to display
       } else if (part.isToolResult) {
         widgets.add(_buildToolResult(part, theme));
       } else {
@@ -248,34 +248,6 @@ class _MessageBubbleState extends State<MessageBubble>
     }
 
     return blocks;
-  }
-
-  Widget _buildToolCall(Part part, ThemeData theme, bool isUser) {
-    final color = isUser ? Colors.white.withOpacity(0.9) : theme.colorScheme.tertiary;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isUser
-            ? Colors.white.withOpacity(0.15)
-            : theme.colorScheme.tertiaryContainer.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.build, size: 14, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              part.content,
-              style: TextStyle(fontSize: 12, color: color),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildToolResult(Part part, ThemeData theme) {
