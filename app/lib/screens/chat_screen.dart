@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../providers/chat_provider.dart';
 import '../models/message.dart';
 import '../services/api_service.dart';
@@ -21,34 +22,92 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _textController = TextEditingController();
-  final _scrollController = ScrollController();
+  final _itemScrollController = ItemScrollController();
+  final _itemPositionsListener = ItemPositionsListener.create();
   bool _autoScroll = true;
+  bool _programmaticScroll = false;
   int _lastContentLength = 0;
   String? _lastSessionId;
   List<int> _userPairIndices = [];
   int _currentPairIndex = 0;
+  bool _isAtBottom = true;
+  int _messageCount = 0;
+  bool _scrollReady = true;
 
   @override
   void initState() {
     super.initState();
+    _itemPositionsListener.itemPositions.addListener(_onPositionsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstRunAndInit();
     });
   }
 
+  void _onPositionsChanged() {
+    final positions = _itemPositionsListener.itemPositions.value;
+    if (positions.isEmpty || _messageCount == 0) return;
+
+    // FAB visibility: hide when last item is anywhere in viewport
+    _isAtBottom = positions.any((p) => p.index == _messageCount - 1 && p.itemLeadingEdge < 1.0);
+
+    // Auto-scroll: only when last item's trailing edge is near bottom (accounts for 6px padding)
+    final nearBottom = positions.any((p) => p.index == _messageCount - 1 && p.itemTrailingEdge >= 0.99);
+
+    // Update scroll wheel pair index based on topmost item
+    final uIndices = _userPairIndices;
+    if (uIndices.isNotEmpty) {
+      final topPos = positions.where((p) => p.itemLeadingEdge >= 0 && p.itemLeadingEdge < 1);
+      final firstVisible = topPos.isEmpty ? positions.first.index : topPos.first.index;
+      var nearest = 0;
+      var minD = 999999;
+      for (var i = 0; i < uIndices.length; i++) {
+        final d = (uIndices[i] - firstVisible).abs();
+        if (d < minD) { minD = d; nearest = i; }
+      }
+      if (nearest != _currentPairIndex) {
+        _currentPairIndex = nearest;
+        setState(() {});
+        return;
+      }
+    }
+
+    if (nearBottom) {
+      if (!_autoScroll) setState(() {});
+      _autoScroll = true;
+      _unreadCount = 0;
+    } else if (!_programmaticScroll) {
+      if (_autoScroll) setState(() {});
+      _autoScroll = false;
+    }
+  }
+
   @override
   void dispose() {
-    _scrollController.dispose();
+    _itemPositionsListener.itemPositions.removeListener(_onPositionsChanged);
     _textController.dispose();
     super.dispose();
   }
 
-  void _scrollToBottom() {
-    if (!_autoScroll) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    });
+  void _scrollToLastItem({bool animate = true}) {
+    if (_messageCount == 0) return;
+    _programmaticScroll = true;
+    // Scroll to second-to-last item (user message in last pair) so that
+    // the AI response is visible below it, showing the full end of conversation.
+    final target = _messageCount > 1 ? _messageCount - 2 : 0;
+    if (animate) {
+      _itemScrollController.scrollTo(
+        index: target,
+        alignment: 0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+      );
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _programmaticScroll = false;
+      });
+    } else {
+      _itemScrollController.jumpTo(index: target, alignment: 0);
+      _programmaticScroll = false;
+    }
   }
 
   void _sendMessage() {
@@ -57,7 +116,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.clear();
     _autoScroll = true;
     context.read<ChatProvider>().sendMessage(text);
-    _scrollToBottom();
+    _scrollToLastItem();
   }
 
   List<int> _getUserIndices(List<Message> messages) {
@@ -68,48 +127,22 @@ class _ChatScreenState extends State<ChatScreen> {
     return indices;
   }
 
-  bool _scrollPending = false;
-
-  void _updatePairFromScroll(double offset) {
-    if (_scrollPending) return;
-    _scrollPending = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollPending = false;
-    });
-    final msgs = context.read<ChatProvider>().messages;
-    if (msgs.isEmpty) return;
-    final avgH = 80.0;
-    final idx = (offset / avgH).round().clamp(0, msgs.length - 1);
-    final uIndices = _userPairIndices;
-    if (uIndices.isEmpty) return;
-    var nearest = 0;
-    var minD = 999999;
-    for (var i = 0; i < uIndices.length; i++) {
-      final d = (uIndices[i] - idx).abs();
-      if (d < minD) { minD = d; nearest = i; }
-    }
-    if (nearest != _currentPairIndex) {
-      setState(() => _currentPairIndex = nearest);
-    }
-  }
+  int _unreadCount = 0;
 
   void _scrollToPair(int pairIndex) {
-    final provider = context.read<ChatProvider>();
-    final msgs = provider.messages;
     final indices = _userPairIndices;
-    if (pairIndex >= indices.length || msgs.length <= 1) return;
-    if (!_scrollController.hasClients) return;
+    if (pairIndex >= indices.length || _messageCount <= 1) return;
     _autoScroll = false;
-    final maxExtent = _scrollController.position.maxScrollExtent;
-    if (pairIndex == indices.length - 1) {
-      _scrollController.animateTo(maxExtent,
-          duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-      return;
-    }
+    _programmaticScroll = true;
     final msgIdx = indices[pairIndex];
-    final ratio = msgIdx / (msgs.length - 1);
-    _scrollController.animateTo((ratio * maxExtent).clamp(0.0, maxExtent),
-        duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+    _itemScrollController.scrollTo(
+      index: msgIdx,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _programmaticScroll = false;
+    });
   }
 
   Future<void> _checkFirstRunAndInit() async {
@@ -701,28 +734,53 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Consumer<ChatProvider>(
         builder: (context, provider, _) {
+          // Provider may not be ready yet
+          final msgs = provider.messages;
+          _messageCount = msgs.length;
+          _userPairIndices = _getUserIndices(msgs);
+
+          // Session switch detection
           if (_lastSessionId != provider.currentSession?.id) {
             _lastSessionId = provider.currentSession?.id;
             _lastContentLength = 0;
             _autoScroll = true;
+            _isAtBottom = true;
+            _scrollReady = false;
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _scrollToBottom();
+              if (!mounted) return;
+              _scrollToLastItem(animate: false);
+              _scrollReady = true;
+              setState(() {});
             });
           }
+
+          // Loading state: either provider loading or scroll not ready
+          if ((provider.isLoading && provider.currentSession == null && provider.sessions.isNotEmpty) || !_scrollReady) {
+            return _buildLoadingIndicator(theme);
+          }
+
           if (_autoScroll && provider.messages.isNotEmpty) {
             final curContentLen = provider.messages.last.textContent.length;
             if (_lastContentLength != curContentLen) {
               _lastContentLength = curContentLen;
-              _scrollToBottom();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                _scrollToLastItem(animate: true);
+              });
             }
-          } else if (provider.messages.isEmpty) {
+          } else if (provider.messages.isNotEmpty) {
+            final curContentLen = provider.messages.last.textContent.length;
+            if (_lastContentLength != curContentLen) {
+              _lastContentLength = curContentLen;
+              _unreadCount++;
+            }
+          } else {
             _lastContentLength = 0;
           }
+
           if (!provider.isConnected) {
             return _buildSetupGuide(theme, provider);
           }
-          final msgs = provider.messages;
-          _userPairIndices = _getUserIndices(msgs);
           return Column(
             children: [
               if (provider.error != null && msgs.isNotEmpty)
@@ -730,41 +788,42 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: msgs.isEmpty
                     ? _buildWelcome(theme, provider)
-                    : Row(
+                    : Stack(
                         children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => FocusScope.of(context).unfocus(),
-                              child: NotificationListener<ScrollNotification>(
-                                onNotification: (notification) {
-                                  if (notification is UserScrollNotification) {
-                                    _autoScroll = false;
-                                  }
-                                  if (notification is ScrollUpdateNotification) {
-                                    _updatePairFromScroll(_scrollController.offset);
-                                  }
-                                  return false;
-                                },
-                                child: ListView.builder(
-                                  controller: _scrollController,
-                                  padding: const EdgeInsets.symmetric(vertical: 6),
-                                  itemCount: msgs.length,
-                                  itemBuilder: (context, index) {
-                                    return MessageBubble(
-                                      message: msgs[index],
-                                      animate: index == msgs.length - 1,
-                                    );
-                                  },
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: GestureDetector(
+                                  onTap: () => FocusScope.of(context).unfocus(),
+                                  child: ScrollablePositionedList.builder(
+                                    itemScrollController: _itemScrollController,
+                                    itemPositionsListener: _itemPositionsListener,
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    itemCount: msgs.length,
+                                    physics: const ClampingScrollPhysics(),
+                                    itemBuilder: (context, index) {
+                                      return MessageBubble(
+                                        message: msgs[index],
+                                        animate: index == msgs.length - 1,
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
-                            ),
+                              if (_userPairIndices.length > 1)
+                                ScrollWheel(
+                                  itemCount: _userPairIndices.length,
+                                  activeIndex: _currentPairIndex,
+                                  onIndexChanged: _scrollToPair,
+                                  themeColor: theme.colorScheme.primary,
+                                ),
+                            ],
                           ),
-                          if (_userPairIndices.length > 1)
-                            ScrollWheel(
-                              itemCount: _userPairIndices.length,
-                              activeIndex: _currentPairIndex,
-                              onIndexChanged: _scrollToPair,
-                              themeColor: theme.colorScheme.primary,
+                          if (!_isAtBottom)
+                            Positioned(
+                              right: (_userPairIndices.length > 1 ? 36 : 8),
+                              bottom: 8,
+                              child: _buildScrollToBottomFAB(theme),
                             ),
                         ],
                       ),
@@ -780,6 +839,53 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator(ThemeData theme) {
+    return Center(
+      key: const ValueKey('session_loading'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(width: 36, height: 36, child: CircularProgressIndicator(strokeWidth: 3)),
+          const SizedBox(height: 16),
+          Text('切换会话…', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.4))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScrollToBottomFAB(ThemeData theme) {
+    return FloatingActionButton.small(
+      heroTag: 'scrollToBottom',
+      backgroundColor: Colors.white.withOpacity(0.85),
+      onPressed: () {
+        _autoScroll = true;
+        _unreadCount = 0;
+        _isAtBottom = true;
+        setState(() {});
+        _scrollToLastItem();
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.arrow_downward, color: Colors.grey[700]),
+          if (_unreadCount > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
