@@ -1,0 +1,13 @@
+# 本地构建配置
+BUILD.local.md
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Build artifacts 根目录
+/build/
