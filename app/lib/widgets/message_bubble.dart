@@ -102,7 +102,31 @@ class _MessageBubbleState extends State<MessageBubble>
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _buildParts(context, theme, isUser),
+                    children: [
+                      ..._buildParts(context, theme, isUser),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(
+                                ClipboardData(text: widget.message.textContent));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('已复制到剪贴板'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Icon(Icons.copy, size: 13,
+                                color: isUser
+                                    ? Colors.white.withOpacity(0.5)
+                                    : theme.colorScheme.onSurface.withOpacity(0.25)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Padding(
@@ -292,42 +316,51 @@ class _MessageBubbleState extends State<MessageBubble>
 
       if (line.startsWith('### ')) {
         children.add(WidgetSpan(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 4),
-            child: Text(
-              line.substring(4),
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 4),
+              child: Text(
+                line.substring(4),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
               ),
             ),
           ),
         ));
       } else if (line.startsWith('## ')) {
         children.add(WidgetSpan(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 14, bottom: 4),
-            child: Text(
-              line.substring(3),
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14, bottom: 4),
+              child: Text(
+                line.substring(3),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
               ),
             ),
           ),
         ));
       } else if (line.startsWith('# ')) {
         children.add(WidgetSpan(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 14, bottom: 6),
-            child: Text(
-              line.substring(2),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14, bottom: 6),
+              child: Text(
+                line.substring(2),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
               ),
             ),
           ),
