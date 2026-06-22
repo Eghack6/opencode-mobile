@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import '../app.dart';
 import '../providers/chat_provider.dart';
 import '../models/message.dart';
 import '../services/api_service.dart';
@@ -23,7 +25,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
   final _textController = TextEditingController();
   final _itemScrollController = ItemScrollController();
   final _itemPositionsListener = ItemPositionsListener.create();
@@ -37,10 +39,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   int _messageCount = 0;
 
   _DeployOption? _deployOption;
+  late AnimationController _borderAnimController;
 
   @override
   void initState() {
     super.initState();
+    _borderAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
     WidgetsBinding.instance.addObserver(this);
     _itemPositionsListener.itemPositions.addListener(_onPositionsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -91,6 +98,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _itemPositionsListener.itemPositions.removeListener(_onPositionsChanged);
     _textController.dispose();
+    _borderAnimController.dispose();
     super.dispose();
   }
 
@@ -190,9 +198,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _showModelPicker(ChatProvider provider) {
     final searchController = TextEditingController();
     ValueNotifier<String> searchQuery = ValueNotifier('');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -204,104 +215,222 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   m.id.toLowerCase().contains(query);
             }).toList();
 
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Row(
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xDD141428)
+                        : const Color(0xF2F5F6FA),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.08)
+                          : Colors.white.withOpacity(0.5),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('选择模型',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('完成'),
+                      // Drag handle
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.15)
+                                : Colors.black.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
                       ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.auto_awesome,
+                                size: 20, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Text('选择模型',
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.3,
+                                    color: Theme.of(context).colorScheme.onSurface)),
+                            const Spacer(),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: Icon(Icons.close,
+                                  size: 20,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+                              style: IconButton.styleFrom(
+                                backgroundColor: isDark
+                                    ? Colors.white.withOpacity(0.06)
+                                    : Colors.black.withOpacity(0.04),
+                                shape: const CircleBorder(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          controller: searchController,
+                          decoration: InputDecoration(
+                            hintText: '搜索模型...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide.none),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            filled: true,
+                            fillColor: isDark
+                                ? Colors.white.withOpacity(0.06)
+                                : Colors.white.withOpacity(0.7),
+                            suffixIcon: searchQuery.value.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      searchController.clear();
+                                      searchQuery.value = '';
+                                      setSheetState(() {});
+                                    },
+                                  )
+                                : null,
+                          ),
+                          onChanged: (v) {
+                            searchQuery.value = v;
+                            setSheetState(() {});
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Divider(height: 1,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.06)
+                              : Colors.black.withOpacity(0.05)),
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.4,
+                        child: models.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.search_off,
+                                        size: 40,
+                                        color: Theme.of(context)
+                                            .colorScheme.onSurface
+                                            .withOpacity(0.2)),
+                                    const SizedBox(height: 8),
+                                    Text('没有匹配的模型',
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withOpacity(0.4))),
+                                  ],
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                itemCount: models.length,
+                                itemBuilder: (context, index) {
+                                  final model = models[index];
+                                  final isSelected =
+                                      model.id == provider.selectedModel;
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      left: 12,
+                                      right: 12,
+                                      top: index == 0 ? 4 : 2,
+                                      bottom: index == models.length - 1 ? 4 : 2,
+                                    ),
+                                    child: Material(
+                                      color: isSelected
+                                          ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(14),
+                                        onTap: () {
+                                          provider.setModel(model.id);
+                                          Navigator.pop(context);
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 12),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 36,
+                                                height: 36,
+                                                decoration: BoxDecoration(
+                                                  color: isSelected
+                                                      ? Theme.of(context).colorScheme.primary.withOpacity(0.15)
+                                                      : isDark
+                                                          ? Colors.white.withOpacity(0.05)
+                                                          : Colors.black.withOpacity(0.03),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Icon(
+                                                  isSelected
+                                                      ? Icons.check_circle
+                                                      : Icons.smart_toy_outlined,
+                                                  size: 18,
+                                                  color: isSelected
+                                                      ? Theme.of(context).colorScheme.primary
+                                                      : Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(model.modelName,
+                                                        style: TextStyle(
+                                                            fontSize: 14,
+                                                            fontWeight: isSelected
+                                                                ? FontWeight.w600
+                                                                : FontWeight.w500,
+                                                            color: isSelected
+                                                                ? Theme.of(context).colorScheme.primary
+                                                                : null)),
+                                                    const SizedBox(height: 2),
+                                                    Text(model.providerName,
+                                                        style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Theme.of(context)
+                                                                .colorScheme.onSurface
+                                                                .withOpacity(0.45))),
+                                                  ],
+                                                ),
+                                              ),
+                                              Text(model.id.split('/').last,
+                                                  style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontFamily: 'monospace',
+                                                      color: Colors.grey[500])),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      SizedBox(height: MediaQuery.of(context).padding.bottom + 4),
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TextField(
-                    controller: searchController,
-                    decoration: InputDecoration(
-                      hintText: '搜索模型...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      filled: true,
-                      fillColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerLow,
-                      suffixIcon: searchQuery.value.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () {
-                                searchController.clear();
-                                searchQuery.value = '';
-                                setSheetState(() {});
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (v) {
-                      searchQuery.value = v;
-                      setSheetState(() {});
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Divider(height: 1),
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.4,
-                  child: models.isEmpty
-                      ? Center(
-                          child: Text('没有匹配的模型',
-                              style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withOpacity(0.4))))
-                      : ListView.separated(
-                          itemCount: models.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 1, indent: 16),
-                          itemBuilder: (context, index) {
-                            final model = models[index];
-                            final isSelected =
-                                model.id == provider.selectedModel;
-                            return ListTile(
-                              leading: Icon(
-                                isSelected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                              ),
-                              title: Text(model.modelName,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500)),
-                              subtitle: Text(model.providerName,
-                                  style: const TextStyle(fontSize: 12)),
-                              trailing: Text(model.id.split('/').last,
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[500])),
-                              onTap: () {
-                                provider.setModel(model.id);
-                                Navigator.pop(context);
-                              },
-                            );
-                          },
-                        ),
-                ),
-              ],
+              ),
             );
           },
         );
@@ -656,10 +785,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: isDark ? GlassColors.darkBgGradient : GlassColors.lightBgGradient,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
+        resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              color: isDark
+                  ? Colors.black.withOpacity(0.2)
+                  : Colors.white.withOpacity(0.3),
+            ),
+          ),
+        ),
         title: GestureDetector(
           onLongPress: () {
             final api = ApiService();
@@ -789,24 +939,30 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           final msgs = provider.messages;
           _messageCount = msgs.length;
           _userPairIndices = _getUserIndices(msgs);
-          return Column(
+          return Stack(
             children: [
-              if (provider.error != null && msgs.isNotEmpty)
-                _buildErrorBanner(theme, provider),
-              Expanded(
-                child: msgs.isEmpty
-                    ? _buildWelcome(theme, provider)
-                    : Stack(
-                        children: [
-                          Row(
+              // Chat content (extends behind floating input bar)
+              Column(
+                children: [
+                  if (provider.error != null && msgs.isNotEmpty)
+                    _buildErrorBanner(theme, provider),
+                  Expanded(
+                    child: msgs.isEmpty
+                        ? _buildWelcome(theme, provider)
+                        : Row(
                             children: [
                               Expanded(
-                                  child: GestureDetector(
+                                child: GestureDetector(
                                   onTap: () => FocusScope.of(context).unfocus(),
                                   child: ScrollablePositionedList.builder(
                                     itemScrollController: _itemScrollController,
                                     itemPositionsListener: _itemPositionsListener,
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    padding: EdgeInsets.only(
+                                      // Top padding: status bar + AppBar height + small gap
+                                      top: MediaQuery.of(context).padding.top + kToolbarHeight + 4,
+                                      // Bottom padding: input bar height + SafeArea bottom + gap
+                                      bottom: MediaQuery.of(context).padding.bottom + 76,
+                                    ),
                                     itemCount: msgs.length,
                                     physics: const ClampingScrollPhysics(),
                                     itemBuilder: (context, index) {
@@ -827,27 +983,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                 ),
                             ],
                           ),
-                          if (!_isAtBottom)
-                            Positioned(
-                              right: (_userPairIndices.length > 1 ? 36 : 8),
-                              bottom: 8,
-                              child: _buildScrollToBottomFAB(theme),
-                            ),
-                        ],
-                      ),
+                  ),
+                ],
               ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 150),
-                alignment: Alignment.topCenter,
-                child: provider.isGenerating
-                    ? const LinearProgressIndicator(minHeight: 3)
-                    : const SizedBox(height: 0),
+              // Floating input bar
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildInputBar(theme),
               ),
-              _buildInputBar(theme),
+              // Scroll to bottom FAB
+              if (!_isAtBottom)
+                Positioned(
+                  right: (_userPairIndices.length > 1 ? 40 : 12),
+                  bottom: 76,
+                  child: _buildScrollToBottomFAB(theme),
+                ),
             ],
           );
         },
       ),
+    ),
     );
   }
 
@@ -940,7 +1097,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Widget _buildSetupGuide(ThemeData theme, ChatProvider provider) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + kToolbarHeight + 16,
+        left: 20,
+        right: 20,
+        bottom: 20,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1254,7 +1416,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget _buildWelcome(ThemeData theme, ChatProvider provider) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + kToolbarHeight + 24,
+          left: 24,
+          right: 24,
+          bottom: MediaQuery.of(context).padding.bottom + 80,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1298,80 +1465,163 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildInputBar(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-      ),
-      child: Consumer<ChatProvider>(
-        builder: (context, provider, _) {
-          return Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+    final isDark = theme.brightness == Brightness.dark;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+        child: Consumer<ChatProvider>(
+          builder: (context, provider, _) {
+            // Control animation based on generating state
+            if (provider.isGenerating && !_borderAnimController.isAnimating) {
+              _borderAnimController.repeat();
+            } else if (!provider.isGenerating && _borderAnimController.isAnimating) {
+              _borderAnimController.stop();
+              _borderAnimController.reset();
+            }
+
+            final inputChild = ClipRRect(
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color: theme.colorScheme.outlineVariant.withOpacity(0.3),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.black.withOpacity(0.2)
+                        : Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(28),
+                    border: provider.isGenerating
+                        ? null
+                        : Border.all(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.08)
+                                : Colors.black.withOpacity(0.06),
+                            width: 1,
+                          ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // TextField
+                      Expanded(
+                        child: TextField(
+                          controller: _textController,
+                          enabled: provider.isConnected && !provider.isGenerating,
+                          decoration: InputDecoration(
+                            hintText: provider.isConnected
+                                ? '输入消息...'
+                                : '请先连接服务器...',
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            filled: false,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 22, vertical: 12),
+                          ),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w300,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 6,
+                          minLines: 1,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: !provider.isConnected || provider.isGenerating
+                              ? null
+                              : (_) => _sendMessage(),
+                        ),
+                      ),
+                      // Send / Stop button (outside TextField so it's always tappable)
+                      GestureDetector(
+                        onTap: !provider.isConnected
+                            ? null
+                            : (provider.isGenerating
+                                ? () => provider.abortGeneration()
+                                : _sendMessage),
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: provider.isGenerating
+                              ? Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFFE74C3C).withOpacity(0.15),
+                                    border: Border.all(
+                                      color: const Color(0xFFE74C3C).withOpacity(0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE74C3C),
+                                        borderRadius: BorderRadius.circular(2.5),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: provider.isConnected
+                                        ? GlassColors.primaryGradient
+                                        : null,
+                                    color: !provider.isConnected
+                                        ? theme.colorScheme.onSurface.withOpacity(0.1)
+                                        : null,
+                                    boxShadow: provider.isConnected
+                                        ? [
+                                            BoxShadow(
+                                              color: GlassColors.primaryStart.withOpacity(0.25),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Icon(
+                                    Icons.arrow_upward,
+                                    size: 13,
+                                    color: provider.isConnected
+                                        ? Colors.white
+                                        : theme.colorScheme.onSurface.withOpacity(0.3),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: TextField(
-                      controller: _textController,
-                      enabled: provider.isConnected && !provider.isGenerating,
-                      decoration: InputDecoration(
-                        hintText: provider.isConnected
-                            ? '输入消息...'
-                            : '请先连接服务器...',
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                      ),
-                      style: TextStyle(fontSize: 15, color: theme.colorScheme.onSurface),
-                      maxLines: 6,
-                      minLines: 1,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: !provider.isConnected || provider.isGenerating
-                          ? null
-                          : (_) => _sendMessage(),
-                    ),
+            );
+
+            if (!provider.isGenerating) return inputChild;
+
+            // Animated border when generating
+            return AnimatedBuilder(
+              animation: _borderAnimController,
+              builder: (context, _) {
+                return CustomPaint(
+                  painter: _AnimatedBorderPainter(
+                    progress: _borderAnimController.value,
+                    borderRadius: 28,
+                    color1: GlassColors.primaryStart,
+                    color2: GlassColors.accentStart,
+                    isDark: isDark,
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 4, bottom: 4),
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: provider.isConnected
-                        ? (provider.isGenerating
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.primary)
-                        : theme.colorScheme.onSurface.withOpacity(0.12),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: !provider.isConnected
-                          ? null
-                          : (provider.isGenerating
-                              ? provider.abortGeneration
-                              : _sendMessage),
-                      icon: Icon(
-                        provider.isGenerating
-                            ? Icons.stop
-                            : Icons.arrow_upward,
-                        size: 18,
-                        color: provider.isConnected
-                            ? theme.colorScheme.onPrimary
-                            : theme.colorScheme.onSurface.withOpacity(0.3),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+                  child: inputChild,
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -1526,9 +1776,81 @@ class _OnboardingPage extends StatelessWidget {
                 color:
                     Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
               ),
-              textAlign: TextAlign.center),
+               textAlign: TextAlign.center),
         ],
       ),
     );
+  }
+}
+
+/// Draws an animated gradient stroke along a rounded rectangle border.
+class _AnimatedBorderPainter extends CustomPainter {
+  final double progress;
+  final double borderRadius;
+  final Color color1;
+  final Color color2;
+  final bool isDark;
+
+  _AnimatedBorderPainter({
+    required this.progress,
+    required this.borderRadius,
+    required this.color1,
+    required this.color2,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Radius.circular(borderRadius),
+    );
+    final path = Path()..addRRect(rrect);
+
+    // Static dim border underneath
+    final basePaint = Paint()
+      ..color = isDark
+          ? Colors.white.withOpacity(0.06)
+          : Colors.black.withOpacity(0.04)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawRRect(rrect, basePaint);
+
+    // Animated gradient stroke — seamless loop
+    final angle = progress * 2 * 3.14159265;
+    final shader = SweepGradient(
+      startAngle: 0,
+      endAngle: 2 * 3.14159265,
+      colors: [
+        color1.withOpacity(0.0),
+        color1.withOpacity(0.7),
+        color2.withOpacity(0.9),
+        color1.withOpacity(0.7),
+        color1.withOpacity(0.0),
+      ],
+      stops: const [0.0, 0.2, 0.35, 0.5, 0.65],
+      tileMode: TileMode.clamp,
+      transform: GradientRotation(angle),
+    ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final strokePaint = Paint()
+      ..shader = shader
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(path, strokePaint);
+
+    // Soft outer glow
+    final glowPaint = Paint()
+      ..shader = shader
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawPath(path, glowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AnimatedBorderPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }

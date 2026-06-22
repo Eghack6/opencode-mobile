@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../app.dart';
 import '../models/message.dart';
 import '../models/part.dart';
 import '../providers/chat_provider.dart';
@@ -61,6 +63,7 @@ class _MessageBubbleState extends State<MessageBubble>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isUser = widget.message.isUser;
 
     return FadeTransition(
@@ -72,45 +75,90 @@ class _MessageBubbleState extends State<MessageBubble>
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               isUser ? 48 : 12,
-              2,
+              3,
               isUser ? 12 : 48,
-              2,
+              3,
             ),
             child: Column(
               crossAxisAlignment:
                   isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
+                // Glass bubble
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
+                    // User: gradient fill; AI: frosted glass
+                    gradient: isUser
+                        ? GlassColors.primaryGradient
+                        : null,
                     color: isUser
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.surfaceContainerLow,
+                        ? null
+                        : (isDark
+                            ? Colors.white.withOpacity(0.07)
+                            : Colors.white.withOpacity(0.65)),
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(isUser ? 18 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 18),
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: Radius.circular(isUser ? 20 : 6),
+                      bottomRight: Radius.circular(isUser ? 6 : 20),
+                    ),
+                    border: Border.all(
+                      color: isUser
+                          ? Colors.white.withOpacity(0.2)
+                          : (isDark
+                              ? Colors.white.withOpacity(0.08)
+                              : Colors.white.withOpacity(0.6)),
+                      width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: isUser
-                            ? theme.colorScheme.primary.withOpacity(0.15)
-                            : theme.colorScheme.shadow.withOpacity(0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                            ? GlassColors.primaryStart.withOpacity(0.25)
+                            : (isDark
+                                ? Colors.black.withOpacity(0.3)
+                                : Colors.black.withOpacity(0.04)),
+                        blurRadius: isUser ? 12 : 8,
+                        offset: const Offset(0, 4),
+                        spreadRadius: isUser ? -2 : 0,
                       ),
+                      if (!isUser)
+                        BoxShadow(
+                          color: Colors.white.withOpacity(isDark ? 0.03 : 0.5),
+                          blurRadius: 1,
+                          offset: const Offset(0, -0.5),
+                          spreadRadius: 0,
+                        ),
                     ],
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ..._buildParts(context, theme, isUser),
-                    ],
-                  ),
+                  // Frosted glass blur for AI messages
+                  child: isUser
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ..._buildParts(context, theme, isUser),
+                          ],
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(20),
+                            topRight: const Radius.circular(20),
+                            bottomLeft: const Radius.circular(6),
+                            bottomRight: const Radius.circular(20),
+                          ),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ..._buildParts(context, theme, isUser),
+                              ],
+                            ),
+                          ),
+                        ),
                 ),
+                // Timestamp
                 Padding(
-                  padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
+                  padding: const EdgeInsets.only(top: 4, left: 6, right: 6),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -120,13 +168,14 @@ class _MessageBubbleState extends State<MessageBubble>
                           child: Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: Icon(Icons.copy, size: 11,
-                                color: theme.colorScheme.onSurface.withOpacity(0.25)),
+                                color: theme.colorScheme.onSurface.withOpacity(0.2)),
                           ),
                         ),
                         Text(
                           _formatTime(widget.message.createdAt),
                           style: TextStyle(
                             fontSize: 10,
+                            fontWeight: FontWeight.w300,
                             color: theme.colorScheme.onSurface.withOpacity(0.3),
                           ),
                         ),
@@ -135,6 +184,7 @@ class _MessageBubbleState extends State<MessageBubble>
                           _formatTime(widget.message.createdAt),
                           style: TextStyle(
                             fontSize: 10,
+                            fontWeight: FontWeight.w300,
                             color: theme.colorScheme.onSurface.withOpacity(0.3),
                           ),
                         ),
@@ -143,7 +193,7 @@ class _MessageBubbleState extends State<MessageBubble>
                           child: Padding(
                             padding: const EdgeInsets.only(left: 6),
                             child: Icon(Icons.copy, size: 11,
-                                color: theme.colorScheme.onSurface.withOpacity(0.25)),
+                                color: theme.colorScheme.onSurface.withOpacity(0.2)),
                           ),
                         ),
                       ],
@@ -482,8 +532,10 @@ class _MessageBubbleState extends State<MessageBubble>
     return SelectableText.rich(
       TextSpan(children: children),
       style: TextStyle(
-        fontSize: 14,
-        height: 1.45,
+        fontSize: 14.5,
+        height: 1.6,
+        fontWeight: FontWeight.w300,
+        letterSpacing: 0.1,
         color: textColor,
       ),
     );
@@ -695,7 +747,7 @@ class _MessageBubbleState extends State<MessageBubble>
       textAlign: align ?? TextAlign.start,
       text: TextSpan(
         children: spans,
-        style: TextStyle(fontSize: 14, height: 1.45, color: textColor),
+        style: TextStyle(fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w300, letterSpacing: 0.1, color: textColor),
       ),
     );
   }

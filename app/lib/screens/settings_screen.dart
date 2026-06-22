@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../app.dart';
 import '../models/connection_config.dart';
 import '../providers/chat_provider.dart';
 import '../services/ssh_tunnel_service.dart';
@@ -123,14 +125,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.watch<ChatProvider>();
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('设置'),
-        centerTitle: true,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: isDark ? GlassColors.darkBgGradient : GlassColors.lightBgGradient,
       ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          flexibleSpace: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                color: isDark
+                    ? Colors.black.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.3),
+              ),
+            ),
+          ),
+          title: const Text('设置'),
+          centerTitle: true,
+        ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + kToolbarHeight + 12,
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(context).padding.bottom + 16,
+        ),
         children: [
           _buildSavedConfigsCard(theme, provider),
           const SizedBox(height: 16),
@@ -143,30 +171,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildAboutCard(theme),
         ],
       ),
+    ),
     );
   }
 
   Widget _buildDirectConnectionCard(ThemeData theme, ChatProvider provider) {
+    final isDark = theme.brightness == Brightness.dark;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.dns, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('直连', style: theme.textTheme.titleMedium),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.dns, color: theme.colorScheme.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('直连', style: theme.textTheme.titleMedium),
+                    Text(
+                      '局域网直连',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
+                  ],
+                ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '直接连接到局域网内的 opencode serve 实例。',
-              style: TextStyle(
-                fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -174,7 +216,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: InputDecoration(
                 labelText: '服务器地址',
                 hintText: 'http://192.168.1.100:4096',
-                border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.link),
                 suffixIcon: provider.isConnected && !provider.useSshTunnel
                     ? const Icon(Icons.check_circle, color: Colors.green)
@@ -222,17 +263,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.vpn_lock, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.vpn_lock, color: theme.colorScheme.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child:
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text('SSH 隧道', style: theme.textTheme.titleMedium),
+                      Text(
+                        '加密通信',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withOpacity(0.45),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 Switch(
                   value: _useSsh,
@@ -243,14 +303,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              '通过 SSH 隧道加密所有通信流量，比直连更安全。',
-              style: TextStyle(
-                fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
             if (_useSsh) ...[
               const SizedBox(height: 8),
               _sshStatusBar(theme, provider, sshStatus),
@@ -260,7 +312,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration: InputDecoration(
                   labelText: '快速填写',
                   hintText: 'user@host:22',
-                  border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.paste),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.arrow_forward),
@@ -278,7 +329,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration: const InputDecoration(
                   labelText: 'SSH 主机',
                   hintText: '192.168.1.100 或 your-server.com',
-                  border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.dns_outlined),
                 ),
                 keyboardType: TextInputType.url,
@@ -293,7 +343,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: _sshUsernameController,
                       decoration: const InputDecoration(
                         labelText: '用户名',
-                        border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                       autocorrect: false,
@@ -305,7 +354,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: _sshPortController,
                       decoration: const InputDecoration(
                         labelText: '端口',
-                        border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.numbers),
                       ),
                       keyboardType: TextInputType.number,
@@ -319,7 +367,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   labelText: '密码',
-                  border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(_obscurePassword
@@ -345,7 +392,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 minLines: 1,
                 decoration: InputDecoration(
                   labelText: '私钥 (PEM)',
-                  border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.key),
                   suffixIcon: IconButton(
                     icon: Icon(_obscureKey
@@ -376,7 +422,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: const InputDecoration(
                         labelText: '远程主机',
                         hintText: 'localhost',
-                        border: OutlineInputBorder(),
                       ),
                       autocorrect: false,
                     ),
@@ -388,7 +433,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: const InputDecoration(
                         labelText: '端口',
                         hintText: '4096',
-                        border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
                     ),
@@ -439,18 +483,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildThemeCard(ThemeData theme) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.palette, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('外观', style: theme.textTheme.titleMedium),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.palette, color: theme.colorScheme.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('外观', style: theme.textTheme.titleMedium),
+                    Text(
+                      '主题设置',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             SegmentedButton<ThemeMode>(
               segments: const [
                 ButtonSegment(
@@ -530,15 +594,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildAboutCard(ThemeData theme) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('关于', style: theme.textTheme.titleMedium),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.info_outline, color: theme.colorScheme.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('关于', style: theme.textTheme.titleMedium),
+                    Text(
+                      '应用信息',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -676,32 +760,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSavedConfigsCard(ThemeData theme, ChatProvider provider) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.bookmark, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('设备配置', style: theme.textTheme.titleMedium),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.bookmark, color: theme.colorScheme.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('设备配置', style: theme.textTheme.titleMedium),
+                    Text(
+                      '一键切换',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
+                  ],
+                ),
                 const Spacer(),
                 if (_savedConfigs.isNotEmpty)
-                  Text('${_savedConfigs.length} 个',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurface.withOpacity(0.4))),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('${_savedConfigs.length} 个',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.primary)),
+                  ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              '保存常用设备的连接配置，一键切换多台设备。',
-              style: TextStyle(
-                fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             // Save current config
             Row(
               children: [
@@ -711,7 +815,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: const InputDecoration(
                       labelText: '配置名称',
                       hintText: '如：家里电脑、公司服务器',
-                      border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.label_outline),
                       isDense: true,
                     ),
