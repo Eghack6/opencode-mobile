@@ -707,14 +707,33 @@ class ChatProvider extends ChangeNotifier {
     _generatingSessions.remove(sessionId);
     _generationTimers[sessionId]?.cancel();
     _generationTimers.remove(sessionId);
-    _streamingMessages.remove(sessionId);
     _abortedSessions.add(sessionId);
+
+    // Remove the streaming message from _sessionMessages so the partial /
+    // empty assistant bubble does not stay visible after abort.
+    final streamingMsg = _streamingMessages.remove(sessionId);
+    if (streamingMsg != null) {
+      final msgs = _sessionMessages[sessionId];
+      if (msgs != null) {
+        _sessionMessages[sessionId] =
+            msgs.where((m) => m.id != streamingMsg.id).toList();
+      }
+    }
+
     // Cancel the pending HTTP request immediately so the UI updates right away
     _api.cancelPendingRequest();
     try {
       await _api.abortSession(sessionId);
     } catch (_) {}
     notifyListeners();
+
+    // Refresh from server after a short delay to get a clean message list
+    // (the server may have persisted a partial message before processing abort).
+    Future.delayed(const Duration(seconds: 1), () {
+      if (_currentSession?.id == sessionId) {
+        _refreshMessagesFor(sessionId);
+      }
+    });
   }
 
   // -- Periodic polling for multi-device sync --
@@ -733,12 +752,19 @@ class ChatProvider extends ChangeNotifier {
     try {
       final sessionId = _currentSession!.id;
       final msgs = await _api.listMessages(sessionId);
+      // Filter out empty assistant messages (e.g. from aborted generations),
+      // consistent with _refreshMessagesFor().
+      final filtered = msgs
+          .where((m) => !m.isAssistant || m.textContent.trim().isNotEmpty)
+          .toList();
       final cached = _sessionMessages[sessionId] ?? [];
       // Only update and notify if message count changed (avoid unnecessary rebuilds)
-      if (msgs.length != cached.length ||
-          (msgs.isNotEmpty && cached.isNotEmpty && msgs.last.id != cached.last.id)) {
-        _sessionMessages[sessionId] = msgs;
-        _log('poll: session $sessionId updated (${cached.length} -> ${msgs.length} msgs)');
+      if (filtered.length != cached.length ||
+          (filtered.isNotEmpty &&
+              cached.isNotEmpty &&
+              filtered.last.id != cached.last.id)) {
+        _sessionMessages[sessionId] = filtered;
+        _log('poll: session $sessionId updated (${cached.length} -> ${filtered.length} msgs)');
         if (_currentSession?.id == sessionId) {
           notifyListeners();
         }

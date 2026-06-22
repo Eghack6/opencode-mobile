@@ -21,6 +21,18 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Timer? _searchDebounce;
 
   @override
+  void initState() {
+    super.initState();
+    // Refresh session list from server so that recently-active sessions
+    // appear at the top when the user opens this screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ChatProvider>().loadSessions();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _searchDebounce?.cancel();

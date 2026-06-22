@@ -162,9 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildSavedConfigsCard(theme, provider),
           const SizedBox(height: 16),
-          _buildDirectConnectionCard(theme, provider),
-          const SizedBox(height: 16),
-          _buildSshTunnelCard(theme, provider),
+          _buildConnectionCard(theme, provider),
           const SizedBox(height: 16),
           _buildThemeCard(theme),
           const SizedBox(height: 16),
@@ -175,90 +173,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildDirectConnectionCard(ThemeData theme, ChatProvider provider) {
+  Widget _buildConnectionCard(ThemeData theme, ChatProvider provider) {
     final isDark = theme.brightness == Brightness.dark;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.dns, color: theme.colorScheme.primary, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('直连', style: theme.textTheme.titleMedium),
-                    Text(
-                      '局域网直连',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.45),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                labelText: '服务器地址',
-                hintText: 'http://192.168.1.100:4096',
-                prefixIcon: const Icon(Icons.link),
-                suffixIcon: provider.isConnected && !provider.useSshTunnel
-                    ? const Icon(Icons.check_circle, color: Colors.green)
-                    : null,
-              ),
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        _useSsh ? null : (_testing ? null : _testDirect),
-                    icon: _testing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.wifi_find),
-                    label: Text(_testing ? '测试中...' : '测试连接'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _useSsh ? null : _saveDirect,
-                    icon: const Icon(Icons.save),
-                    label: const Text('连接'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSshTunnelCard(ThemeData theme, ChatProvider provider) {
     final sshStatus = provider.sshTunnelStatus;
 
     return Card(
@@ -276,33 +192,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: theme.colorScheme.primary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.vpn_lock, color: theme.colorScheme.primary, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('SSH 隧道', style: theme.textTheme.titleMedium),
-                      Text(
-                        '加密通信',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurface.withOpacity(0.45),
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    _useSsh ? Icons.vpn_lock : Icons.dns,
+                    color: theme.colorScheme.primary,
+                    size: 18,
                   ),
                 ),
-                Switch(
-                  value: _useSsh,
-                  onChanged: (v) async {
-                    await provider.setSshTunnelEnabled(v);
-                    setState(() => _useSsh = v);
-                  },
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('连接方式', style: theme.textTheme.titleMedium),
+                    Text(
+                      _useSsh ? 'SSH 隧道 · 加密通信' : '直连 · 局域网',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
+                  ],
                 ),
+                if (!_useSsh && provider.isConnected)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  ),
               ],
             ),
+            const SizedBox(height: 16),
+            // Mode selector: Direct vs SSH
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('直连'),
+                  icon: Icon(Icons.dns),
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text('SSH 隧道'),
+                  icon: Icon(Icons.vpn_lock),
+                ),
+              ],
+              selected: {_useSsh},
+              onSelectionChanged: (modes) async {
+                final useSsh = modes.first;
+                setState(() => _useSsh = useSsh);
+                await provider.setSshTunnelEnabled(useSsh);
+              },
+            ),
+
+            // ── Direct connection form ──
+            if (!_useSsh) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _urlController,
+                decoration: InputDecoration(
+                  labelText: '服务器地址',
+                  hintText: 'http://192.168.1.100:4096',
+                  prefixIcon: const Icon(Icons.link),
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _testing ? null : _testDirect,
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.wifi_find),
+                      label: Text(_testing ? '测试中...' : '测试连接'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _saveDirect,
+                      icon: const Icon(Icons.save),
+                      label: const Text('连接'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // ── SSH tunnel form ──
             if (_useSsh) ...[
               const SizedBox(height: 8),
               _sshStatusBar(theme, provider, sshStatus),
@@ -450,8 +431,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.vpn_lock),
                   label: Text(sshStatus == SshTunnelStatus.connecting
@@ -707,6 +687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     final provider = context.read<ChatProvider>();
     await provider.setSshTunnelEnabled(config.useSshTunnel);
+    bool connected = false;
     if (config.useSshTunnel) {
       final sshConfig = SshConfig(
         host: config.sshHost,
@@ -719,34 +700,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (sshConfig.isValid) {
         await sshConfig.save();
-        final connected = await provider.connect('');
-        if (mounted) {
-          showToast(context,
-              connected
-                  ? '已连接「${config.name}」'
-                  : '连接失败：${provider.sshTunnelError ?? "未知错误"}',
-              bgColor: connected ? Colors.green : Colors.red);
-        }
+        connected = await provider.connect('');
       } else {
         if (mounted) {
           showToast(context, '已加载「${config.name}」，请补充 SSH 信息后连接',
               bgColor: Colors.orange);
         }
+        return;
       }
     } else {
       if (config.serverUrl.isNotEmpty) {
-        final connected = await provider.connect(config.serverUrl);
-        if (mounted) {
-          showToast(context,
-              connected ? '已连接「${config.name}」' : '连接失败',
-              bgColor: connected ? Colors.green : Colors.red);
-        }
+        connected = await provider.connect(config.serverUrl);
       } else {
         if (mounted) {
           showToast(context, '已加载「${config.name}」，请补充地址后连接',
               bgColor: Colors.orange);
         }
+        return;
       }
+    }
+
+    if (!mounted) return;
+    if (connected) {
+      // Switching to a different server – create a new session so that
+      // replies from connection B don't appear in connection A's session.
+      await provider.createSession();
+      showToast(context, '已连接「${config.name}」', bgColor: Colors.green);
+      Navigator.pop(context); // back to chat
+    } else {
+      final err = config.useSshTunnel
+          ? (provider.sshTunnelError ?? '未知错误')
+          : '';
+      showToast(context, '连接失败${err.isNotEmpty ? '：$err' : ''}',
+          bgColor: Colors.red);
     }
   }
 

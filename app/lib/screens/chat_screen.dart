@@ -27,6 +27,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
   final _textController = TextEditingController();
+  final _focusNode = FocusNode();
   final _itemScrollController = ItemScrollController();
   final _itemPositionsListener = ItemPositionsListener.create();
   bool _autoScroll = true;
@@ -48,6 +49,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
+    _focusNode.addListener(_onFocusChange);
     WidgetsBinding.instance.addObserver(this);
     _itemPositionsListener.itemPositions.addListener(_onPositionsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -67,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
 
     // Update scroll wheel pair index based on topmost item
     final uIndices = _userPairIndices;
+    bool needRebuild = false;
     if (uIndices.isNotEmpty) {
       final topPos = positions.where((p) => p.itemLeadingEdge >= 0 && p.itemLeadingEdge < 1);
       final firstVisible = topPos.isEmpty ? positions.first.index : topPos.first.index;
@@ -78,18 +81,35 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
       }
       if (nearest != _currentPairIndex) {
         _currentPairIndex = nearest;
-        setState(() {});
-        return;
+        needRebuild = true;
       }
     }
 
+    // Always update _autoScroll – previously an early return skipped this,
+    // causing _autoScroll to stay true while the user was browsing old messages,
+    // which then triggered unwanted jumps on the next poll / content update.
     if (nearBottom) {
-      if (!_autoScroll) setState(() {});
+      if (!_autoScroll) needRebuild = true;
       _autoScroll = true;
       _unreadCount = 0;
     } else if (!_programmaticScroll) {
-      if (_autoScroll) setState(() {});
+      if (_autoScroll) needRebuild = true;
       _autoScroll = false;
+    }
+
+    if (needRebuild) {
+      setState(() {});
+    }
+  }
+
+  void _onFocusChange() {
+    if (_focusNode.hasFocus) {
+      // Keyboard is appearing – scroll to bottom after layout settles
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        _autoScroll = true;
+        _scrollToLastItem();
+      });
     }
   }
 
@@ -97,6 +117,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _itemPositionsListener.itemPositions.removeListener(_onPositionsChanged);
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
     _textController.dispose();
     _borderAnimController.dispose();
     super.dispose();
@@ -1081,7 +1103,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
   Widget _buildErrorBanner(ThemeData theme, ChatProvider provider) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + kToolbarHeight + 4,
+        left: 16,
+        right: 16,
+        bottom: 8,
+      ),
       color: theme.colorScheme.errorContainer,
       child: Row(
         children: [
@@ -1529,6 +1556,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                       Expanded(
                         child: TextField(
                           controller: _textController,
+                          focusNode: _focusNode,
                           enabled: provider.isConnected && !provider.isGenerating,
                           decoration: InputDecoration(
                             hintText: provider.isConnected
