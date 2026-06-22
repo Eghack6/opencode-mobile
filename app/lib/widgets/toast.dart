@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 void showToast(BuildContext context, String message, {Color? bgColor}) {
-  final top = MediaQuery.of(context).padding.top + kToolbarHeight + 32;
   late final OverlayEntry entry;
   entry = OverlayEntry(
-    builder: (_) => Positioned(
-      top: top,
+    builder: (ctx) => Positioned(
+      top: MediaQuery.of(ctx).padding.top + kToolbarHeight + 32,
       left: 0,
       right: 0,
       child: _ToastWidget(
