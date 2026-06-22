@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/connection_config.dart';
 import '../providers/chat_provider.dart';
 import '../services/ssh_tunnel_service.dart';
 import '../services/theme_provider.dart';
@@ -23,11 +24,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _sshRemoteHostController;
   late TextEditingController _sshRemotePortController;
   late TextEditingController _sshQuickFillController;
+  late TextEditingController _configNameController;
   bool _testing = false;
   bool _useSsh = false;
   bool _obscurePassword = true;
   bool _obscureKey = true;
   ThemeMode _themeMode = ThemeMode.system;
+  List<ConnectionConfig> _savedConfigs = [];
 
   @override
   void initState() {
@@ -41,7 +44,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _sshRemoteHostController = TextEditingController(text: 'localhost');
     _sshRemotePortController = TextEditingController(text: '4096');
     _sshQuickFillController = TextEditingController();
+    _configNameController = TextEditingController();
     _loadConfig();
+    _loadSavedConfigs();
   }
 
   Future<void> _loadConfig() async {
@@ -76,6 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _sshRemoteHostController.dispose();
     _sshRemotePortController.dispose();
     _sshQuickFillController.dispose();
+    _configNameController.dispose();
     super.dispose();
   }
 
@@ -126,6 +132,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _buildSavedConfigsCard(theme, provider),
+          const SizedBox(height: 16),
           _buildDirectConnectionCard(theme, provider),
           const SizedBox(height: 16),
           _buildSshTunnelCard(theme, provider),
@@ -560,6 +568,214 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           Text(value, style: const TextStyle(fontSize: 14)),
         ],
+      ),
+    );
+  }
+
+  // -- Saved connection configs --
+
+  Future<void> _loadSavedConfigs() async {
+    final configs = await ConfigStore.loadAll();
+    if (mounted) setState(() => _savedConfigs = configs);
+  }
+
+  Future<void> _saveCurrentConfig() async {
+    final name = _configNameController.text.trim();
+    if (name.isEmpty) {
+      showToast(context, '请填写配置名称', bgColor: Colors.red);
+      return;
+    }
+    final config = ConnectionConfig(
+      name: name,
+      serverUrl: _urlController.text.trim(),
+      useSshTunnel: _useSsh,
+      sshHost: _sshHostController.text.trim(),
+      sshPort: int.tryParse(_sshPortController.text.trim()) ?? 22,
+      sshUsername: _sshUsernameController.text.trim(),
+      sshPassword: _sshPasswordController.text.isNotEmpty
+          ? _sshPasswordController.text
+          : null,
+      sshPrivateKey: _sshKeyController.text.isNotEmpty
+          ? _sshKeyController.text
+          : null,
+      sshRemoteHost: _sshRemoteHostController.text.trim().isNotEmpty
+          ? _sshRemoteHostController.text.trim()
+          : 'localhost',
+      sshRemotePort: int.tryParse(_sshRemotePortController.text.trim()) ?? 4096,
+    );
+    await ConfigStore.add(config);
+    _configNameController.clear();
+    await _loadSavedConfigs();
+    if (mounted) showToast(context, '配置「$name」已保存');
+  }
+
+  Future<void> _applyConfig(ConnectionConfig config) async {
+    setState(() {
+      _urlController.text = config.serverUrl;
+      _useSsh = config.useSshTunnel;
+      _sshHostController.text = config.sshHost;
+      _sshPortController.text = config.sshPort.toString();
+      _sshUsernameController.text = config.sshUsername;
+      _sshPasswordController.text = config.sshPassword ?? '';
+      _sshKeyController.text = config.sshPrivateKey ?? '';
+      _sshRemoteHostController.text = config.sshRemoteHost;
+      _sshRemotePortController.text = config.sshRemotePort.toString();
+    });
+    final provider = context.read<ChatProvider>();
+    await provider.setSshTunnelEnabled(config.useSshTunnel);
+    if (config.useSshTunnel) {
+      final sshConfig = SshConfig(
+        host: config.sshHost,
+        port: config.sshPort,
+        username: config.sshUsername,
+        password: config.sshPassword,
+        privateKey: config.sshPrivateKey,
+        remoteHost: config.sshRemoteHost,
+        remotePort: config.sshRemotePort,
+      );
+      if (sshConfig.isValid) {
+        await sshConfig.save();
+        final connected = await provider.connect('');
+        if (mounted) {
+          showToast(context,
+              connected
+                  ? '已连接「${config.name}」'
+                  : '连接失败：${provider.sshTunnelError ?? "未知错误"}',
+              bgColor: connected ? Colors.green : Colors.red);
+        }
+      } else {
+        if (mounted) {
+          showToast(context, '已加载「${config.name}」，请补充 SSH 信息后连接',
+              bgColor: Colors.orange);
+        }
+      }
+    } else {
+      if (config.serverUrl.isNotEmpty) {
+        final connected = await provider.connect(config.serverUrl);
+        if (mounted) {
+          showToast(context,
+              connected ? '已连接「${config.name}」' : '连接失败',
+              bgColor: connected ? Colors.green : Colors.red);
+        }
+      } else {
+        if (mounted) {
+          showToast(context, '已加载「${config.name}」，请补充地址后连接',
+              bgColor: Colors.orange);
+        }
+      }
+    }
+  }
+
+  Future<void> _deleteConfig(int index) async {
+    final name = _savedConfigs[index].name;
+    await ConfigStore.remove(index);
+    await _loadSavedConfigs();
+    if (mounted) showToast(context, '已删除「$name」');
+  }
+
+  Widget _buildSavedConfigsCard(ThemeData theme, ChatProvider provider) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.bookmark, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('设备配置', style: theme.textTheme.titleMedium),
+                const Spacer(),
+                if (_savedConfigs.isNotEmpty)
+                  Text('${_savedConfigs.length} 个',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withOpacity(0.4))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '保存常用设备的连接配置，一键切换多台设备。',
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Save current config
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _configNameController,
+                    decoration: const InputDecoration(
+                      labelText: '配置名称',
+                      hintText: '如：家里电脑、公司服务器',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.label_outline),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _saveCurrentConfig,
+                  icon: const Icon(Icons.save, size: 18),
+                  label: const Text('保存'),
+                ),
+              ],
+            ),
+            // List saved configs
+            if (_savedConfigs.isNotEmpty) ...[
+              const Divider(height: 24),
+              ...List.generate(_savedConfigs.length, (i) {
+                final config = _savedConfigs[i];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Card(
+                    elevation: 0,
+                    color: theme.colorScheme.surfaceContainerHigh,
+                    child: ListTile(
+                      dense: true,
+                      leading: Icon(
+                        config.useSshTunnel ? Icons.vpn_lock : Icons.dns,
+                        size: 20,
+                        color: theme.colorScheme.primary,
+                      ),
+                      title: Text(config.name,
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w500)),
+                      subtitle: Text(config.subtitle,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurface
+                                  .withOpacity(0.5))),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.play_arrow,
+                                size: 20, color: Colors.green[600]),
+                            tooltip: '连接',
+                            onPressed: () => _applyConfig(config),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.delete_outline,
+                                size: 18,
+                                color: theme.colorScheme.onSurface
+                                    .withOpacity(0.3)),
+                            tooltip: '删除',
+                            onPressed: () => _deleteConfig(i),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ],
+        ),
       ),
     );
   }

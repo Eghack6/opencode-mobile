@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/session.dart';
 import '../models/message.dart';
@@ -54,6 +55,10 @@ class ChatProvider extends ChangeNotifier {
 
   final List<String> _debugLogs = [];
   static const int _maxDebugLogs = 200;
+
+  // Periodic polling for multi-device sync
+  Timer? _pollingTimer;
+  static const Duration _pollingInterval = Duration(seconds: 5);
 
   List<Session> get sessions => _sessions;
   Session? get currentSession => _currentSession;
@@ -375,6 +380,8 @@ class ChatProvider extends ChangeNotifier {
           _generationTimers.remove(doneSessionId);
           // Refresh the session's messages from API
           _refreshMessagesFor(doneSessionId);
+          // Also refresh sessions list (title may have been auto-updated)
+          loadSessions();
         }
         if (_currentSession == null || _currentSession!.id == doneSessionId) {
           notifyListeners();
@@ -471,6 +478,7 @@ class ChatProvider extends ChangeNotifier {
       _error = e.toString();
     }
     _isLoading = false;
+    _restartPolling();
     notifyListeners();
   }
 
@@ -482,13 +490,13 @@ class ChatProvider extends ChangeNotifier {
     try {
       final session = await _api.getSession(id);
       _currentSession = session;
-      if (!_sessionMessages.containsKey(session.id) || _sessionMessages[session.id]!.isEmpty) {
-        await _refreshMessagesFor(session.id);
-      }
+      // Always refresh messages from server to support multi-device sync
+      await _refreshMessagesFor(session.id);
     } catch (e) {
       _error = e.toString();
     }
     _isLoading = false;
+    _restartPolling();
     notifyListeners();
   }
 
@@ -695,8 +703,54 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // -- Periodic polling for multi-device sync --
+
+  void _restartPolling() {
+    _pollingTimer?.cancel();
+    if (_currentSession != null && _isConnected) {
+      _pollingTimer = Timer.periodic(_pollingInterval, (_) => _pollCurrentSession());
+    }
+  }
+
+  Future<void> _pollCurrentSession() async {
+    if (_currentSession == null || !_isConnected) return;
+    // Skip polling if the session is currently generating (SSE handles it)
+    if (_generatingSessions.contains(_currentSession!.id)) return;
+    try {
+      final sessionId = _currentSession!.id;
+      final msgs = await _api.listMessages(sessionId);
+      final cached = _sessionMessages[sessionId] ?? [];
+      // Only update and notify if message count changed (avoid unnecessary rebuilds)
+      if (msgs.length != cached.length ||
+          (msgs.isNotEmpty && cached.isNotEmpty && msgs.last.id != cached.last.id)) {
+        _sessionMessages[sessionId] = msgs;
+        _log('poll: session $sessionId updated (${cached.length} -> ${msgs.length} msgs)');
+        if (_currentSession?.id == sessionId) {
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      _log('poll: ERROR $e');
+    }
+  }
+
+  /// Called when the app comes back to foreground.
+  /// Refreshes sessions list and current session messages.
+  Future<void> onAppResumed() async {
+    if (!_isConnected || !_initialized) return;
+    _log('app resumed -> refreshing');
+    _restartPolling();
+    // Refresh session list (other device may have created/deleted sessions)
+    await loadSessions();
+    // Refresh current session messages
+    if (_currentSession != null) {
+      await _refreshMessagesFor(_currentSession!.id);
+    }
+  }
+
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     for (final timer in _generationTimers.values) {
       timer.cancel();
     }
