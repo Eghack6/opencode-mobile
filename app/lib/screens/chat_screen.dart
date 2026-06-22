@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/chat_provider.dart';
+import '../models/message.dart';
 import '../services/api_service.dart';
 import '../services/ssh_tunnel_service.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/scroll_wheel.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
 
@@ -23,6 +25,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _autoScroll = true;
   int _lastContentLength = 0;
   String? _lastSessionId;
+  List<int> _userPairIndices = [];
+  int _currentPairIndex = 0;
 
   @override
   void initState() {
@@ -54,6 +58,51 @@ class _ChatScreenState extends State<ChatScreen> {
     _autoScroll = true;
     context.read<ChatProvider>().sendMessage(text);
     _scrollToBottom();
+  }
+
+  List<int> _getUserIndices(List<Message> messages) {
+    final indices = <int>[];
+    for (int i = 0; i < messages.length; i++) {
+      if (messages[i].isUser) indices.add(i);
+    }
+    return indices;
+  }
+
+  void _updatePairFromScroll(double offset) {
+    final provider = context.read<ChatProvider>();
+    final msgs = provider.messages;
+    if (msgs.isEmpty) return;
+    final avgH = 80.0;
+    final idx = (offset / avgH).round().clamp(0, msgs.length - 1);
+    final uIndices = _userPairIndices;
+    if (uIndices.isEmpty) return;
+    var nearest = 0;
+    var minD = 999999;
+    for (var i = 0; i < uIndices.length; i++) {
+      final d = (uIndices[i] - idx).abs();
+      if (d < minD) { minD = d; nearest = i; }
+    }
+    if (nearest != _currentPairIndex) {
+      setState(() => _currentPairIndex = nearest);
+    }
+  }
+
+  void _scrollToPair(int pairIndex) {
+    final provider = context.read<ChatProvider>();
+    final msgs = provider.messages;
+    final indices = _userPairIndices;
+    if (pairIndex >= indices.length || msgs.length <= 1) return;
+    _autoScroll = false;
+    final maxExtent = _scrollController.position.maxScrollExtent;
+    if (pairIndex == indices.length - 1) {
+      _scrollController.animateTo(maxExtent,
+          duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      return;
+    }
+    final msgIdx = indices[pairIndex];
+    final ratio = msgIdx / (msgs.length - 1);
+    _scrollController.animateTo((ratio * maxExtent).clamp(0.0, maxExtent),
+        duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
   }
 
   Future<void> _checkFirstRunAndInit() async {
@@ -626,11 +675,6 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: '新建会话',
-            onPressed: () => context.read<ChatProvider>().createSession(),
-          ),
-          IconButton(
             icon: const Icon(Icons.history),
             tooltip: '会话列表',
             onPressed: _openSessions,
@@ -652,6 +696,9 @@ class _ChatScreenState extends State<ChatScreen> {
             _lastSessionId = provider.currentSession?.id;
             _lastContentLength = 0;
             _autoScroll = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _scrollToBottom();
+            });
           }
           if (_autoScroll && provider.messages.isNotEmpty) {
             final curContentLen = provider.messages.last.textContent.length;
@@ -665,35 +712,52 @@ class _ChatScreenState extends State<ChatScreen> {
           if (!provider.isConnected) {
             return _buildSetupGuide(theme, provider);
           }
+          final msgs = provider.messages;
+          _userPairIndices = _getUserIndices(msgs);
           return Column(
             children: [
-              if (provider.error != null && provider.messages.isNotEmpty)
+              if (provider.error != null && msgs.isNotEmpty)
                 _buildErrorBanner(theme, provider),
               Expanded(
-                child: provider.messages.isEmpty
+                child: msgs.isEmpty
                     ? _buildWelcome(theme, provider)
-                    : GestureDetector(
-                        onTap: () => FocusScope.of(context).unfocus(),
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: (notification) {
-                            if (notification is UserScrollNotification) {
-                              _autoScroll = false;
-                            }
-                            return false;
-                          },
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            itemCount: provider.messages.length,
-                            itemBuilder: (context, index) {
-                              return MessageBubble(
-                                message: provider.messages[index],
-                                animate: index ==
-                                    provider.messages.length - 1,
-                              );
-                            },
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => FocusScope.of(context).unfocus(),
+                              child: NotificationListener<ScrollNotification>(
+                                onNotification: (notification) {
+                                  if (notification is UserScrollNotification) {
+                                    _autoScroll = false;
+                                  }
+                                  if (notification is ScrollUpdateNotification) {
+                                    _updatePairFromScroll(_scrollController.offset);
+                                  }
+                                  return false;
+                                },
+                                child: ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  itemCount: msgs.length,
+                                  itemBuilder: (context, index) {
+                                    return MessageBubble(
+                                      message: msgs[index],
+                                      animate: index == msgs.length - 1,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          if (_userPairIndices.length > 1)
+                            ScrollWheel(
+                              itemCount: _userPairIndices.length,
+                              activeIndex: _currentPairIndex,
+                              onIndexChanged: _scrollToPair,
+                              themeColor: theme.colorScheme.primary,
+                            ),
+                        ],
                       ),
               ),
               AnimatedSize(

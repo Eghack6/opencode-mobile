@@ -509,12 +509,13 @@ class ChatProvider extends ChangeNotifier {
   Future<void> selectSession(String id) async {
     if (_currentSession?.id == id) return;
     _isLoading = true;
+    _currentSession = null;
     notifyListeners();
     try {
-      _currentSession = await _api.getSession(id);
-      // Load or refresh messages for this session
-      if (!_sessionMessages.containsKey(id) || _sessionMessages[id]!.isEmpty) {
-        await _refreshMessagesFor(id);
+      final session = await _api.getSession(id);
+      _currentSession = session;
+      if (!_sessionMessages.containsKey(session.id) || _sessionMessages[session.id]!.isEmpty) {
+        await _refreshMessagesFor(session.id);
       }
     } catch (e) {
       _error = e.toString();
