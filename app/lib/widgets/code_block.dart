@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:highlight/highlight.dart';
 import 'package:highlight/languages/all.dart';
+import 'toast.dart';
 
 class CodeBlock extends StatefulWidget {
   final String code;
@@ -113,14 +114,7 @@ class _CodeBlockState extends State<CodeBlock> {
   void _copyCode() {
     Clipboard.setData(ClipboardData(text: widget.code));
     setState(() => _copied = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已复制 ${widget.code.split('\n').length} 行代码'),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-        width: 260,
-      ),
-    );
+    showToast(context, '已复制 ${widget.code.split('\n').length} 行代码');
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _copied = false);
     });
@@ -140,9 +134,7 @@ class _CodeBlockState extends State<CodeBlock> {
               tooltip: '复制',
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: widget.code));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已复制到剪贴板')),
-                );
+                showToast(context, '已复制到剪贴板');
               },
             ),
           ],

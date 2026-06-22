@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/chat_provider.dart';
 import '../services/ssh_tunnel_service.dart';
 import '../services/theme_provider.dart';
+import '../widgets/toast.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -574,37 +575,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final provider = context.read<ChatProvider>();
     final connected = await provider.connect(_urlController.text.trim());
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(connected ? '连接成功' : '连接失败'),
-        backgroundColor: connected ? Colors.green : Colors.red,
-      ),
-    );
+    showToast(context, connected ? '连接成功' : '连接失败',
+        bgColor: connected ? Colors.green : Colors.red);
   }
 
   Future<void> _connectSsh() async {
     final config = _buildSshConfig();
     if (!config.isValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请填写 SSH 主机、用户名和密码或私钥'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showToast(context, '请填写 SSH 主机、用户名和密码或私钥', bgColor: Colors.red);
       return;
     }
     await config.save();
     final provider = context.read<ChatProvider>();
     final connected = await provider.connect('');
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(connected
+    showToast(context,
+        connected
             ? 'SSH 隧道已连接，端口 ${provider.sshTunnel.localPort}'
-            : 'SSH 连接失败：${provider.sshTunnelError ?? "未知错误"}'),
-        backgroundColor: connected ? Colors.green : Colors.red,
-      ),
-    );
+            : 'SSH 连接失败：${provider.sshTunnelError ?? "未知错误"}',
+        bgColor: connected ? Colors.green : Colors.red);
   }
 
   Future<void> _disconnectSsh(ChatProvider provider) async {
