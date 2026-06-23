@@ -27,7 +27,7 @@ class _FailedMessage {
 
 class ChatProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
-  final EventService _eventService = EventService(_api);
+  late final EventService _eventService = EventService(_api);
   final SshTunnelService _sshTunnel = SshTunnelService();
 
   List<Session> _sessions = [];
@@ -439,6 +439,11 @@ class ChatProvider extends ChangeNotifier {
       // Filter out empty assistant messages (e.g. from aborted generations)
       final filtered = msgs.where((m) => !m.isAssistant || m.textContent.trim().isNotEmpty).toList();
       final hasStreaming = _streamingMessages.containsKey(sessionId);
+      // Guard: if API returned nothing but we have local data and no active streaming,
+      // the server likely hasn't persisted yet — keep local state until next poll.
+      if (filtered.isEmpty && !hasStreaming && (_sessionMessages[sessionId]?.isNotEmpty == true)) {
+        return;
+      }
       if (!hasStreaming) {
         _sessionMessages[sessionId] = filtered;
       } else {

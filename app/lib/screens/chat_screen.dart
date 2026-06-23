@@ -1604,7 +1604,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                         child: TextField(
                           controller: _textController,
                           focusNode: _focusNode,
-                          enabled: provider.isConnected && !provider.isGenerating,
+                          enabled: provider.isConnected,
                           decoration: InputDecoration(
                             hintText: provider.isConnected
                                 ? '输入消息...'
