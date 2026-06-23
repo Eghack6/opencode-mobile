@@ -265,13 +265,15 @@ class ApiService {
 
   /// Send message asynchronously — returns immediately, results come via SSE.
   Future<void> sendMessageAsync(String sessionId, String text,
-      {String? model}) async {
+      {String? model, List<Map<String, dynamic>>? extraParts}) async {
     final uri = Uri.parse('$_baseUrl/session/$sessionId/prompt_async');
+    final parts = <Map<String, dynamic>>[
+      {'type': 'text', 'text': text},
+    ];
+    if (extraParts != null) parts.addAll(extraParts);
     final body = <String, dynamic>{
       if (model != null) 'model': _parseModel(model),
-      'parts': [
-        {'type': 'text', 'text': text}
-      ],
+      'parts': parts,
     };
     final bodyStr = jsonEncode(body);
     _log('POST', uri.toString(), body: bodyStr);

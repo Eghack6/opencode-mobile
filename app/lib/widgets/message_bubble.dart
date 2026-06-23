@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -398,6 +400,8 @@ class _MessageBubbleState extends State<MessageBubble>
         ));
       } else if (part.isCode) {
         widgets.add(CodeBlock(code: part.content, language: part.language));
+      } else if (part.isImage) {
+        widgets.add(_buildImagePart(part));
       } else if (part.isToolCall) {
         // tool call is not useful to display
       } else if (part.isToolResult) {
@@ -441,6 +445,45 @@ class _MessageBubbleState extends State<MessageBubble>
     }
 
     return blocks;
+  }
+
+  static final Map<String, Uint8List> _imageBytesCache = {};
+
+  Widget _buildImagePart(Part part) {
+    final url = part.imageUrl ?? '';
+    if (url.isEmpty) return const SizedBox.shrink();
+    Widget image;
+    if (url.startsWith('data:')) {
+      final comma = url.indexOf(',');
+      if (comma < 0) return const SizedBox.shrink();
+      final base64 = url.substring(comma + 1);
+      final bytes = _imageBytesCache.putIfAbsent(url, () => base64Decode(base64));
+      image = Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => const Text('图片加载失败'),
+      );
+    } else {
+      image = Image.network(
+        url,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => const Text('图片加载失败'),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: RepaintBoundary(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 300),
+            child: image,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildToolResult(Part part, ThemeData theme) {
@@ -783,6 +826,7 @@ class _MessageBubbleState extends State<MessageBubble>
     final inlineCode = RegExp(r'`(.+?)`');
     final strike = RegExp(r'~~(.+?)~~');
     final link = RegExp(r'\[([^\]]+)\]\(([^)]+)\)');
+    final bareUrl = RegExp(r'https?://[^\s<>\[\]\"\)]+');
 
     String remaining = text;
     while (remaining.isNotEmpty) {
@@ -791,6 +835,7 @@ class _MessageBubbleState extends State<MessageBubble>
       String? matchContent;
       String? matchUrl;
       int? matchStart;
+      int? matchLen;
 
       for (final entry in [
         {'pattern': bold, 'type': 'bold'},
@@ -798,6 +843,7 @@ class _MessageBubbleState extends State<MessageBubble>
         {'pattern': inlineCode, 'type': 'code'},
         {'pattern': strike, 'type': 'strike'},
         {'pattern': link, 'type': 'link'},
+        {'pattern': bareUrl, 'type': 'bareUrl'},
       ]) {
         final m = (entry['pattern'] as RegExp).firstMatch(remaining);
         if (m != null && m.start < earliest) {
@@ -806,6 +852,7 @@ class _MessageBubbleState extends State<MessageBubble>
           matchContent = m.group(1);
           matchUrl = m.groupCount >= 2 ? m.group(2) : null;
           matchStart = m.start;
+          matchLen = m.end - m.start;
         }
       }
 
@@ -818,9 +865,14 @@ class _MessageBubbleState extends State<MessageBubble>
         spans.add(TextSpan(text: remaining.substring(0, matchStart)));
       }
 
-      final matchedLen = _matchLen(matchType, matchContent, matchUrl);
-      final matched =
-          remaining.substring(matchStart, matchStart + matchedLen);
+      int matchedLength;
+      if (matchType == 'bareUrl') {
+        matchedLength = matchLen!;
+        matchUrl = matchContent; // For bare URLs, the URL is the matched text itself
+      } else {
+        matchedLength = _matchLen(matchType, matchContent, matchUrl);
+      }
+      final matched = remaining.substring(matchStart, matchStart + matchedLength);
       remaining = remaining.substring(matchStart + matched.length);
 
       switch (matchType) {
@@ -878,6 +930,26 @@ class _MessageBubbleState extends State<MessageBubble>
               },
               child: Text(
                 matchContent,
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  decoration: TextDecoration.underline,
+                  decorationColor: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ));
+          break;
+        case 'bareUrl':
+          spans.add(WidgetSpan(
+            child: GestureDetector(
+              onTap: () async {
+                final uri = Uri.tryParse(matchUrl ?? '');
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
+              child: Text(
+                matched,
                 style: TextStyle(
                   color: theme.colorScheme.primary,
                   decoration: TextDecoration.underline,

@@ -1,0 +1,18 @@
+# pubspec.yaml changes needed for iOS support
+# Replace the existing description line:
+
+# OLD:
+# description: OpenCode mobile client for Android - chat with AI coding agent on your phone
+
+# NEW:
+# description: OpenCode mobile client - chat with AI coding agent on your phone (Android & iOS)
+
+# Also add ios/ to your .gitignore if not already present:
+# ios/Pods/
+# ios/.symlinks/
+# ios/Flutter/Flutter.framework
+# ios/Flutter/Flutter.podspec
+# ios/Flutter/Generated.xcconfig
+# ios/Flutter/app.flx
+# ios/Flutter/engine/
+# ios/Flutter/flutter_export_environment.sh

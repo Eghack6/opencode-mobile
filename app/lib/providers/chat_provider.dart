@@ -516,8 +516,9 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
+  Future<void> sendMessage(String text,
+      {List<Map<String, dynamic>>? fileParts}) async {
+    if (text.trim().isEmpty && (fileParts == null || fileParts.isEmpty)) return;
     clearError();
     if (_currentSession == null) {
       _log('sendMessage: session is null, creating...');
@@ -540,11 +541,18 @@ class ChatProvider extends ChangeNotifier {
       return;
     }
 
+    final userParts = [Part(type: 'text', content: text)];
+    if (fileParts != null) {
+      for (final fp in fileParts) {
+        userParts.add(Part(type: 'file', content: '',
+            metadata: Map<String, dynamic>.from(fp)));
+      }
+    }
     final userMsg = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       sessionId: sessionId,
       role: 'user',
-      parts: [Part(type: 'text', content: text)],
+      parts: userParts,
       createdAt: DateTime.now(),
     );
 
@@ -573,6 +581,7 @@ class ChatProvider extends ChangeNotifier {
         sessionId,
         text,
         model: _selectedModel,
+        extraParts: fileParts,
       );
       _log('  sendMessageAsync returned (204), waiting for SSE events...');
     } catch (e) {

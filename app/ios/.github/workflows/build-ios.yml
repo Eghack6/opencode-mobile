@@ -1,0 +1,160 @@
+name: Build iOS
+
+on:
+  workflow_dispatch:  # 手动触发
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Enable iOS platform
+        run: |
+          cd app
+          flutter create --platforms=ios . 2>&1 || true
+
+      - name: Patch Info.plist for network access
+        run: |
+          cd app/ios/Runner
+          # Backup original
+          cp Info.plist Info.plist.bak
+          # Use our custom Info.plist
+          cat > Info.plist << 'PLIST_EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>CFBundleDevelopmentRegion</key>
+          	<string>$(DEVELOPMENT_LANGUAGE)</string>
+          	<key>CFBundleDisplayName</key>
+          	<string>OpenCode Mobile</string>
+          	<key>CFBundleExecutable</key>
+          	<string>$(EXECUTABLE_NAME)</string>
+          	<key>CFBundleIdentifier</key>
+          	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+          	<key>CFBundleInfoDictionaryVersion</key>
+          	<string>6.0</string>
+          	<key>CFBundleName</key>
+          	<string>opencode_mobile</string>
+          	<key>CFBundlePackageType</key>
+          	<string>APPL</string>
+          	<key>CFBundleShortVersionString</key>
+          	<string>$(FLUTTER_BUILD_NAME)</string>
+          	<key>CFBundleSignature</key>
+          	<string>????</string>
+          	<key>CFBundleVersion</key>
+          	<string>$(FLUTTER_BUILD_NUMBER)</string>
+          	<key>LSRequiresIPhoneOS</key>
+          	<true/>
+          	<key>UILaunchStoryboardName</key>
+          	<string>LaunchScreen</string>
+          	<key>UIMainStoryboardFile</key>
+          	<string>Main</string>
+          	<key>UISupportedInterfaceOrientations</key>
+          	<array>
+          		<string>UIInterfaceOrientationPortrait</string>
+          		<string>UIInterfaceOrientationLandscapeLeft</string>
+          		<string>UIInterfaceOrientationLandscapeRight</string>
+          	</array>
+          	<key>UIViewControllerBasedStatusBarAppearance</key>
+          	<false/>
+          	<key>NSAppTransportSecurity</key>
+          	<dict>
+          		<key>NSAllowsLocalNetworking</key>
+          		<true/>
+          		<key>NSAllowsArbitraryLoads</key>
+          		<true/>
+          	</dict>
+          	<key>NSLocalNetworkUsageDescription</key>
+          	<string>OpenCode Mobile 需要访问本地网络以连接 opencode 服务器</string>
+          	<key>keychain-access-groups</key>
+          	<array>
+          		<string>$(AppIdentifierPrefix)com.opencode.mobile</string>
+          	</array>
+          </dict>
+          </plist>
+          PLIST_EOF
+
+      - name: Patch Podfile
+        run: |
+          cd app/ios
+          cat > Podfile << 'PODFILE_EOF'
+          platform :ios, '14.0'
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
+
+          def flutter_root
+            generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            unless File.exist?(generated_xcode_build_settings_path)
+              raise "#{generated_xcode_build_settings_path} must exist."
+            end
+            File.foreach(generated_xcode_build_settings_path) do |line|
+              matches = line.match(/FLUTTER_ROOT\=(.*)/)
+              return matches[1].strip if matches
+            end
+            raise "FLUTTER_ROOT not found"
+          end
+
+          require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+          flutter_ios_podfile_setup
+
+          target 'Runner' do
+            use_frameworks!
+            use_modular_headers!
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+          end
+
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+              end
+            end
+          end
+          PODFILE_EOF
+
+      - name: Install Flutter dependencies
+        run: |
+          cd app
+          flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd app/ios
+          pod install --repo-update
+
+      - name: Build iOS (no codesign)
+        run: |
+          cd app
+          flutter build ios --release --no-codesign
+
+      - name: Create .app zip
+        run: |
+          cd app/build/ios/iphoneos
+          zip -r opencode-mobile-ios.zip Runner.app
+
+      - name: Upload iOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-mobile-ios
+          path: app/build/ios/iphoneos/opencode-mobile-ios.zip
+          retention-days: 30

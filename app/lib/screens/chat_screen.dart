@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:mime/mime.dart';
 import '../app.dart';
 import '../providers/chat_provider.dart';
 import '../models/message.dart';
@@ -29,6 +31,9 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
+  final _imagePicker = ImagePicker();
+  String? _pendingImageBase64;
+  String? _pendingImageMime;
   final _itemScrollController = ItemScrollController();
   final _itemPositionsListener = ItemPositionsListener.create();
   bool _autoScroll = true;
@@ -196,13 +201,39 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     }
   }
 
+  Future<void> _pickImage() async {
+    final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    final mimeType = lookupMimeType(file.path) ?? 'image/jpeg';
+    setState(() {
+      _pendingImageBase64 = base64Encode(bytes);
+      _pendingImageMime = mimeType;
+    });
+  }
+
   void _sendMessage() {
     final text = _textController.text.trim();
-    if (text.isEmpty) return;
+    final hasImage = _pendingImageBase64 != null;
+    if (text.isEmpty && !hasImage) return;
     _textController.clear();
+    List<Map<String, dynamic>>? fileParts;
+    if (hasImage) {
+      fileParts = [
+        {
+          'type': 'file',
+          'mime': _pendingImageMime,
+          'url': 'data:$_pendingImageMime;base64,$_pendingImageBase64',
+        }
+      ];
+      setState(() {
+        _pendingImageBase64 = null;
+        _pendingImageMime = null;
+      });
+    }
     _autoScroll = true;
     _userScrolledDuringStream = false;
-    context.read<ChatProvider>().sendMessage(text);
+    context.read<ChatProvider>().sendMessage(text, fileParts: fileParts);
     _scrollToLastItem();
   }
 
@@ -1561,6 +1592,49 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     );
   }
 
+  Widget _buildImagePreview() {
+    if (_pendingImageBase64 == null) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 150, maxWidth: 200),
+              child: Image.memory(
+                base64Decode(_pendingImageBase64!),
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingImageBase64 = null;
+                  _pendingImageMime = null;
+                });
+              },
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInputBar(ThemeData theme) {
     final isDark = theme.brightness == Brightness.dark;
     return SafeArea(
@@ -1596,12 +1670,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                             width: 1,
                           ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // TextField
-                      Expanded(
-                        child: TextField(
+                      if (_pendingImageBase64 != null)
+                        _buildImagePreview(),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // TextField
+                          Expanded(
+                            child: TextField(
                           controller: _textController,
                           focusNode: _focusNode,
                           enabled: provider.isConnected,
@@ -1629,8 +1708,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                               ? null
                               : (_) => _sendMessage(),
                         ),
-                      ),
-                      // Send / Stop button (outside TextField so it's always tappable)
+                        ),
+                          // Image picker button
+                          if (provider.isConnected)
+                            IconButton(
+                              icon: Icon(Icons.image_outlined,
+                                  size: 20,
+                                  color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                              onPressed: provider.isGenerating ? null : _pickImage,
+                              tooltip: '添加图片',
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(36, 36),
+                              ),
+                            ),
+                          // Send / Stop button (outside TextField so it's always tappable)
                       GestureDetector(
                         onTap: !provider.isConnected
                             ? null
@@ -1696,9 +1787,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                       ),
                     ],
                   ),
+                  ],
                 ),
               ),
-            );
+            ),
+          );
 
             if (!provider.isGenerating) return inputChild;
 
