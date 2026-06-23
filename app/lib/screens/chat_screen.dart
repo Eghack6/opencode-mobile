@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -38,6 +39,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
   int _currentPairIndex = 0;
   bool _isAtBottom = true;
   int _messageCount = 0;
+  bool _isUserDragging = false;
+  bool _userScrolledDuringStream = false;
+  Timer? _autoScrollDebounce;
 
   _DeployOption? _deployOption;
   late AnimationController _borderAnimController;
@@ -85,6 +89,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
       }
     }
 
+    // If user is actively dragging, don't change _autoScroll at all
+    if (_isUserDragging) {
+      if (needRebuild) setState(() {});
+      return;
+    }
+
+    // If user has scrolled during this streaming session, keep auto-scroll off
+    // until they explicitly tap FAB or send a new message
+    if (_userScrolledDuringStream && context.read<ChatProvider>().isGenerating) {
+      if (_autoScroll) {
+        _autoScroll = false;
+        needRebuild = true;
+      }
+      if (needRebuild) setState(() {});
+      return;
+    }
+
     // Always update _autoScroll – previously an early return skipped this,
     // causing _autoScroll to stay true while the user was browsing old messages,
     // which then triggered unwanted jumps on the next poll / content update.
@@ -113,8 +134,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     }
   }
 
+  void _onDragStart(DragStartDetails _) {
+    _isUserDragging = true;
+    _autoScrollDebounce?.cancel();
+    // Mark that user has interacted during this streaming session
+    if (context.read<ChatProvider>().isGenerating) {
+      _userScrolledDuringStream = true;
+    }
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    _isUserDragging = false;
+    // Don't auto-resume — user chose to stay at current position
+  }
+
   @override
   void dispose() {
+    _autoScrollDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _itemPositionsListener.itemPositions.removeListener(_onPositionsChanged);
     _focusNode.removeListener(_onFocusChange);
@@ -165,6 +201,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     if (text.isEmpty) return;
     _textController.clear();
     _autoScroll = true;
+    _userScrolledDuringStream = false;
     context.read<ChatProvider>().sendMessage(text);
     _scrollToLastItem();
   }
@@ -935,6 +972,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
             _lastContentLength = 0;
             _autoScroll = true;
             _isAtBottom = true;
+            _userScrolledDuringStream = false;
           }
           if (_autoScroll && provider.messages.isNotEmpty) {
             final curContentLen = provider.messages.last.textContent.length;
@@ -976,23 +1014,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                               Expanded(
                                 child: GestureDetector(
                                   onTap: () => FocusScope.of(context).unfocus(),
-                                  child: ScrollablePositionedList.builder(
-                                    itemScrollController: _itemScrollController,
-                                    itemPositionsListener: _itemPositionsListener,
-                                    padding: EdgeInsets.only(
-                                      // Top padding: status bar + AppBar height + small gap
-                                      top: MediaQuery.of(context).padding.top + kToolbarHeight + 4,
-                                      // Bottom padding: input bar height + SafeArea bottom + gap
-                                      bottom: MediaQuery.of(context).padding.bottom + 76,
+                                  child: GestureDetector(
+                                    onVerticalDragStart: _onDragStart,
+                                    onVerticalDragEnd: _onDragEnd,
+                                    child: ScrollablePositionedList.builder(
+                                      itemScrollController: _itemScrollController,
+                                      itemPositionsListener: _itemPositionsListener,
+                                      padding: EdgeInsets.only(
+                                        top: MediaQuery.of(context).padding.top + kToolbarHeight + 4,
+                                        bottom: MediaQuery.of(context).padding.bottom + 76,
+                                      ),
+                                      itemCount: msgs.length,
+                                      physics: const ClampingScrollPhysics(),
+                                      itemBuilder: (context, index) {
+                                        final isLast = index == msgs.length - 1;
+                                        final isStreaming = isLast && provider.isGenerating && !msgs[index].isUser;
+                                        return RepaintBoundary(
+                                          child: MessageBubble(
+                                            key: ValueKey(msgs[index].id),
+                                            message: msgs[index],
+                                            animate: isLast,
+                                            showTypingCursor: isStreaming,
+                                          ),
+                                        );
+                                      },
                                     ),
-                                    itemCount: msgs.length,
-                                    physics: const ClampingScrollPhysics(),
-                                    itemBuilder: (context, index) {
-                                      return MessageBubble(
-                                        message: msgs[index],
-                                        animate: index == msgs.length - 1,
-                                      );
-                                    },
                                   ),
                                 ),
                               ),
@@ -1067,6 +1113,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
           child: GestureDetector(
             onTap: () {
               _autoScroll = true;
+              _userScrolledDuringStream = false;
               _unreadCount = 0;
               _isAtBottom = true;
               setState(() {});

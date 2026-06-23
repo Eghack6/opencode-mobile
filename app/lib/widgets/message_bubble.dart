@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,12 +16,14 @@ class MessageBubble extends StatefulWidget {
   final Message message;
   final bool reasoningExpanded;
   final bool animate;
+  final bool showTypingCursor;
 
   const MessageBubble({
     super.key,
     required this.message,
     this.reasoningExpanded = false,
     this.animate = false,
+    this.showTypingCursor = false,
   });
 
   @override
@@ -28,14 +31,25 @@ class MessageBubble extends StatefulWidget {
 }
 
 class _MessageBubbleState extends State<MessageBubble>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  // Entrance animation
   late AnimationController _animController;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
 
+  // Typewriter effect
+  int _revealIndex = 0;
+  Timer? _typewriterTimer;
+  static const int _typewriterTotalLength = 800;
+
+  // Cursor blink animation
+  AnimationController? _cursorController;
+
   @override
   void initState() {
     super.initState();
+
+    // Entrance animation
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -52,11 +66,71 @@ class _MessageBubbleState extends State<MessageBubble>
     } else {
       _animController.value = 1;
     }
+
+    // Typewriter + cursor for streaming messages
+    if (widget.showTypingCursor) {
+      _revealIndex = 0;
+      _cursorController = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 500),
+      )..repeat(reverse: true);
+      _typewriterTimer = Timer.periodic(
+        const Duration(milliseconds: 8),
+        (_) => _advanceTypewriter(),
+      );
+    } else {
+      _revealIndex = widget.message.textContent.length;
+    }
+  }
+
+  void _advanceTypewriter() {
+    final textLen = widget.message.textContent.length;
+    if (_revealIndex < textLen) {
+      // Reveal 1 code unit per tick (handles multi-byte chars correctly)
+      setState(() {
+        _revealIndex++;
+      });
+    } else {
+      // All text revealed, stop the timer (cursor keeps blinking)
+      _typewriterTimer?.cancel();
+      _typewriterTimer = null;
+    }
+  }
+
+  @override
+  void didUpdateWidget(MessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.showTypingCursor) {
+      // Start cursor if not started
+      _cursorController ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 500),
+      )..repeat(reverse: true);
+
+      // Start typewriter timer if more text arrived and timer not running
+      if (_typewriterTimer == null && _revealIndex < widget.message.textContent.length) {
+        _typewriterTimer = Timer.periodic(
+          const Duration(milliseconds: 8),
+          (_) => _advanceTypewriter(),
+        );
+      }
+    } else {
+      // Streaming ended: stop everything, show all text
+      _typewriterTimer?.cancel();
+      _typewriterTimer = null;
+      _revealIndex = widget.message.textContent.length;
+      _cursorController?.stop();
+      _cursorController?.reset();
+      _cursorController = null;
+    }
   }
 
   @override
   void dispose() {
+    _typewriterTimer?.cancel();
     _animController.dispose();
+    _cursorController?.dispose();
     super.dispose();
   }
 
@@ -147,12 +221,20 @@ class _MessageBubbleState extends State<MessageBubble>
                           ),
                           child: BackdropFilter(
                             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ..._buildParts(context, theme, isUser),
-                              ],
-                            ),
+                            child: _cursorController != null
+                                ? AnimatedBuilder(
+                                    animation: _cursorController!,
+                                    builder: (context, _) => Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: _buildParts(context, theme, isUser),
+                                    ),
+                                  )
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      ..._buildParts(context, theme, isUser),
+                                    ],
+                                  ),
                           ),
                         ),
                 ),
@@ -271,12 +353,43 @@ class _MessageBubbleState extends State<MessageBubble>
     );
   }
 
+  /// Inline blinking cursor as a WidgetSpan — follows text flow
+  WidgetSpan _buildCursorSpan(Color textColor) {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Opacity(
+        opacity: _cursorController?.value ?? 0.0,
+        child: Text(
+          '|',
+          style: TextStyle(
+            fontSize: 14.5,
+            height: 1.6,
+            fontWeight: FontWeight.w300,
+            color: textColor,
+          ),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _buildParts(BuildContext context, ThemeData theme, bool isUser) {
     final widgets = <Widget>[];
     final textColor = isUser
         ? theme.colorScheme.onPrimary
         : theme.colorScheme.onSurface;
 
+    // During typewriter: show truncated text + inline cursor
+    if (widget.showTypingCursor && _cursorController != null) {
+      final fullText = widget.message.textContent;
+      final visibleText = fullText.substring(0, _revealIndex.clamp(0, fullText.length));
+      if (visibleText.isNotEmpty) {
+        // Parse inline markdown for the visible portion and append cursor
+        widgets.add(_buildMarkdownTextWithCursor(visibleText, theme, textColor));
+      }
+      return widgets;
+    }
+
+    // Normal rendering (not streaming or streaming done)
     for (final part in widget.message.parts) {
       if (part.isReasoning) {
         widgets.add(ReasonBlock(
@@ -528,6 +641,40 @@ class _MessageBubbleState extends State<MessageBubble>
         ));
       }
     }
+
+    return SelectableText.rich(
+      TextSpan(children: children),
+      style: TextStyle(
+        fontSize: 14.5,
+        height: 1.6,
+        fontWeight: FontWeight.w300,
+        letterSpacing: 0.1,
+        color: textColor,
+      ),
+    );
+  }
+
+  /// Same as _buildMarkdownText but appends a blinking cursor at the end
+  Widget _buildMarkdownTextWithCursor(String text, ThemeData theme, Color textColor) {
+    final lines = text.split('\n');
+    final children = <InlineSpan>[];
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (line.trim().isEmpty) {
+        children.add(const WidgetSpan(child: SizedBox(height: 6)));
+        continue;
+      }
+      if (i > 0 && children.isNotEmpty) {
+        children.add(const WidgetSpan(child: SizedBox(height: 2)));
+      }
+      children.add(WidgetSpan(
+        child: _parseInlineMarkdown(line, theme, textColor),
+      ));
+    }
+
+    // Append blinking cursor inline
+    children.add(_buildCursorSpan(textColor));
 
     return SelectableText.rich(
       TextSpan(children: children),
