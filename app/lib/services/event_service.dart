@@ -30,7 +30,9 @@ class EventService {
   http.Client? _client;
   StreamSubscription? _subscription;
   final _controller = StreamController<SseEvent>.broadcast();
-  final ApiService _api = ApiService();
+  final ApiService _api;
+
+  EventService(this._api);
 
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);

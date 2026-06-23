@@ -27,7 +27,7 @@ class _FailedMessage {
 
 class ChatProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
-  final EventService _eventService = EventService();
+  final EventService _eventService = EventService(_api);
   final SshTunnelService _sshTunnel = SshTunnelService();
 
   List<Session> _sessions = [];
@@ -262,8 +262,12 @@ class ChatProvider extends ChangeNotifier {
         }
       }
 
-      // Sort: Opencode provider models first, Zen models at the very top
+      // Sort: Opencode Zen at the very top, then other Opencode models, then rest
       models.sort((a, b) {
+        final aOpencodeZen = a.id == 'opencode/zen' || a.id == 'opencode/Zen';
+        final bOpencodeZen = b.id == 'opencode/zen' || b.id == 'opencode/Zen';
+        if (aOpencodeZen && !bOpencodeZen) return -1;
+        if (!aOpencodeZen && bOpencodeZen) return 1;
         final aIsOpeencode = a.id.startsWith('opencode/');
         final bIsOpeencode = b.id.startsWith('opencode/');
         if (aIsOpeencode && !bIsOpeencode) return -1;
@@ -421,6 +425,8 @@ class ChatProvider extends ChangeNotifier {
           if (idx >= 0) _sessions[idx] = updated;
           notifyListeners();
         }
+        // Refresh model list — server config may have changed
+        if (_isConnected) _refreshModels();
         break;
       default:
         break;
@@ -495,6 +501,8 @@ class ChatProvider extends ChangeNotifier {
       _currentSession = session;
       // Always refresh messages from server to support multi-device sync
       await _refreshMessagesFor(session.id);
+      // Refresh model list when switching sessions (config may differ per session)
+      _refreshModels();
     } catch (e) {
       _error = e.toString();
     }
