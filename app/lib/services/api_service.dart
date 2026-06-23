@@ -227,24 +227,65 @@ class ApiService {
       request.headers.addAll(_headers);
       request.body = bodyStr;
       final streamedResponse = await client.send(request).timeout(
-            const Duration(seconds: 300),
+            const Duration(minutes: 30),
           );
       final responseBody = await streamedResponse.stream.bytesToString();
       _log('POST', uri.toString(),
-          status: streamedResponse.statusCode, response: responseBody);
-      if (streamedResponse.statusCode == 200) {
-        final data = jsonDecode(responseBody);
-        final info = data['info'] as Map<String, dynamic>;
-        final parts = data['parts'] as List<dynamic>? ?? [];
+          status: streamedResponse.statusCode,
+          response: responseBody.length > 500
+              ? '${responseBody.substring(0, 500)}...'
+              : responseBody);
+      if (streamedResponse.statusCode != 200) {
+        final errMsg = responseBody.isNotEmpty
+            ? responseBody
+            : 'Status ${streamedResponse.statusCode}';
+        throw Exception('Failed to send message: $errMsg');
+      }
+      final data = jsonDecode(responseBody);
+      if (data is List && data.length >= 2) {
+        final assistantData = data.last as Map<String, dynamic>;
+        final info = assistantData['info'] as Map<String, dynamic>;
+        final parts = assistantData['parts'] as List<dynamic>? ?? [];
         info['parts'] = parts;
         return Message.fromJson(info);
+      } else if (data is Map<String, dynamic>) {
+        if (data.containsKey('info') && data.containsKey('parts')) {
+          final info = data['info'] as Map<String, dynamic>;
+          final parts = data['parts'] as List<dynamic>? ?? [];
+          info['parts'] = parts;
+          return Message.fromJson(info);
+        }
       }
-      final errMsg =
-          responseBody.isNotEmpty ? responseBody : 'Status ${streamedResponse.statusCode}';
-      throw Exception('Failed to send message: $errMsg');
+      throw Exception('Unexpected response format: $responseBody');
     } finally {
       _activeClient = null;
       client.close();
+    }
+  }
+
+  /// Send message asynchronously — returns immediately, results come via SSE.
+  Future<void> sendMessageAsync(String sessionId, String text,
+      {String? model}) async {
+    final uri = Uri.parse('$_baseUrl/session/$sessionId/prompt_async');
+    final body = <String, dynamic>{
+      if (model != null) 'model': _parseModel(model),
+      'parts': [
+        {'type': 'text', 'text': text}
+      ],
+    };
+    final bodyStr = jsonEncode(body);
+    _log('POST', uri.toString(), body: bodyStr);
+    try {
+      final response = await http
+          .post(uri, headers: _headers, body: bodyStr)
+          .timeout(const Duration(seconds: 30));
+      _log('POST', uri.toString(), status: response.statusCode);
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception('Failed to send message: ${response.statusCode}');
+      }
+    } catch (e) {
+      _log('POST', uri.toString(), error: e.toString());
+      rethrow;
     }
   }
 
@@ -267,5 +308,7 @@ class ApiService {
     }
   }
 
-  Uri get eventUri => Uri.parse('$_baseUrl/global/event');
+  Uri get eventUri {
+    return Uri.parse('$_baseUrl/event');
+  }
 }

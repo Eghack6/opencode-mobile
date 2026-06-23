@@ -555,37 +555,13 @@ class ChatProvider extends ChangeNotifier {
     });
 
     try {
-      _log('  calling API sendMessage for session $sessionId...');
-      final responseMsg = await _api.sendMessage(
+      _log('  calling API sendMessageAsync for session $sessionId...');
+      await _api.sendMessageAsync(
         sessionId,
         text,
         model: _selectedModel,
       );
-      _log('  API returned: role=${responseMsg.role}, id=${responseMsg.id}');
-
-      // If user already switched away, still update the cache for that session
-      _generatingSessions.remove(sessionId);
-      _generationTimers[sessionId]?.cancel();
-      _generationTimers.remove(sessionId);
-
-      if (responseMsg.isUser) {
-        // Replace the local user message with server version
-        final msgs = _sessionMessages[sessionId] ?? [];
-        _sessionMessages[sessionId] = msgs.map((m) {
-          if (m.role == 'user' && m.id == userMsg.id) return responseMsg;
-          return m;
-        }).toList();
-        _log('  replaced local user msg with server version');
-      } else if (responseMsg.isAssistant) {
-        final msgs = _sessionMessages[sessionId] ?? [];
-        _sessionMessages[sessionId] = [...msgs, responseMsg];
-        _log('  added assistant msg for session $sessionId');
-      }
-      // Refresh from API to get any server-side parts
-      await _refreshMessagesFor(sessionId);
-      if (_currentSession?.id == sessionId) {
-        notifyListeners();
-      }
+      _log('  sendMessageAsync returned (204), waiting for SSE events...');
     } catch (e) {
       _log('  API ERROR for session $sessionId: $e');
       _generatingSessions.remove(sessionId);

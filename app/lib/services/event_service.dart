@@ -64,8 +64,17 @@ class EventService {
           if (line.startsWith('event: ')) {
             currentEvent = line.substring(7).trim();
           } else if (line.startsWith('data: ')) {
-            dataBuffer.write(line.substring(6));
-          } else if (line.isEmpty && currentEvent.isNotEmpty) {
+            final dataStr = line.substring(6);
+            if (currentEvent.isEmpty) {
+              try {
+                final parsed = jsonDecode(dataStr);
+                if (parsed is Map<String, dynamic>) {
+                  currentEvent = parsed['type'] as String? ?? '';
+                }
+              } catch (_) {}
+            }
+            dataBuffer = StringBuffer(dataStr);
+          } else if (line.isEmpty && dataBuffer.isNotEmpty) {
             _processEvent(currentEvent, dataBuffer.toString());
             currentEvent = '';
             dataBuffer = StringBuffer();
@@ -99,7 +108,12 @@ class EventService {
           data = (payload['properties'] as Map<String, dynamic>?) ?? {};
           data['_directory'] = parsed['directory'] as String? ?? '';
         } else {
-          data = parsed;
+          data = Map<String, dynamic>.from(parsed);
+          // Unwrap top-level properties for easier access downstream
+          final props = data['properties'];
+          if (props is Map<String, dynamic>) {
+            data.addAll(props);
+          }
         }
       } else {
         data = {'raw': rawData};
@@ -115,9 +129,11 @@ class EventService {
         }
       }
 
+      _logSse('RAW EVENT: type="$eventType" data=$rawData');
+
       final mappedType = _mapEventType(resolvedType);
-      final preview = rawData.length > 100 ? '${rawData.substring(0, 100)}...' : rawData;
-      _logSse('EVENT: "$eventType" -> "$resolvedType" (mapped: $mappedType) data=$preview');
+      final preview = rawData.length > 200 ? '${rawData.substring(0, 200)}...' : rawData;
+      _logSse('PARSED: "$eventType" -> "$resolvedType" (mapped: $mappedType) sessionID=${data['_sessionId'] ?? data['sessionID']} data=$preview');
 
       _controller.add(SseEvent(
         type: mappedType,
@@ -138,6 +154,7 @@ class EventService {
     switch (eventType) {
       case 'server.connected':
         return EventType.serverConnected;
+      case 'message.part.delta':
       case 'message.part.updated':
       case 'message.updated':
       case 'message.delta':
