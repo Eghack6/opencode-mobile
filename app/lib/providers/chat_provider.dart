@@ -773,30 +773,48 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Called when the app comes back to foreground.
-  /// Refreshes sessions list and current session messages.
+  /// Proactively rebuilds SSH tunnel to avoid stale socket issues.
   Future<void> onAppResumed() async {
     if (!_isConnected || !_initialized) return;
     _log('app resumed -> refreshing');
 
-    // SSH tunnel socket may have been killed by Android while in background.
-    // Wait briefly so dartssh2 can detect the dead connection and update status.
-    if (_useSshTunnel && _sshTunnel.status == SshTunnelStatus.connected) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      // If the tunnel silently died, _checkAndConnect will handle reconnect
-      if (_sshTunnel.status != SshTunnelStatus.connected) {
-        _log('app resumed: SSH tunnel dead, waiting for reconnect...');
-        await _sshTunnel.onStatusChanged
-            .where((s) => s == SshTunnelStatus.connected)
-            .first
-            .timeout(const Duration(seconds: 15));
-        _log('app resumed: SSH tunnel reconnected');
+    // SSH tunnel: proactively disconnect and rebuild to ensure fresh connection
+    if (_useSshTunnel) {
+      _log('app resumed: proactively rebuilding SSH tunnel...');
+      await _sshTunnel.disconnect();
+      final config = await SshConfig.load();
+      if (config.isValid) {
+        final ok = await _sshTunnel.connect(config);
+        if (ok) {
+          _log('app resumed: SSH tunnel reconnected');
+          await _api.setBaseUrl(_sshTunnel.localUrl);
+        } else {
+          _log('app resumed: SSH tunnel reconnection failed: ${_sshTunnel.lastError}');
+          _isConnected = false;
+          _error = _sshTunnel.lastError ?? 'SSH tunnel reconnection failed';
+          notifyListeners();
+          return;
+        }
+      } else {
+        _log('app resumed: SSH config invalid');
+        _isConnected = false;
+        _error = 'SSH config is incomplete';
+        notifyListeners();
+        return;
       }
     }
 
+    // Verify connection health
+    _isConnected = await _api.checkHealth();
+    if (!_isConnected) {
+      _log('app resumed: health check failed');
+      notifyListeners();
+      return;
+    }
+
     _restartPolling();
-    // Refresh session list (other device may have created/deleted sessions)
+    _connectEvents();
     await loadSessions();
-    // Refresh current session messages
     if (_currentSession != null) {
       await _refreshMessagesFor(_currentSession!.id);
     }

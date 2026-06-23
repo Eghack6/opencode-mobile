@@ -562,12 +562,14 @@ class _MessageBubbleState extends State<MessageBubble>
             width: double.infinity,
             child: Padding(
               padding: const EdgeInsets.only(top: 12, bottom: 4),
-              child: Text(
-                line.substring(4),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+              child: SelectableText.rich(
+                TextSpan(
+                  text: line.substring(4),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
               ),
             ),
@@ -579,12 +581,14 @@ class _MessageBubbleState extends State<MessageBubble>
             width: double.infinity,
             child: Padding(
               padding: const EdgeInsets.only(top: 14, bottom: 4),
-              child: Text(
-                line.substring(3),
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+              child: SelectableText.rich(
+                TextSpan(
+                  text: line.substring(3),
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
               ),
             ),
@@ -596,12 +600,14 @@ class _MessageBubbleState extends State<MessageBubble>
             width: double.infinity,
             child: Padding(
               padding: const EdgeInsets.only(top: 14, bottom: 6),
-              child: Text(
-                line.substring(2),
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+              child: SelectableText.rich(
+                TextSpan(
+                  text: line.substring(2),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
               ),
             ),
@@ -827,23 +833,20 @@ class _MessageBubbleState extends State<MessageBubble>
         spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
       }
       final url = match.group(1)!;
-      spans.add(WidgetSpan(
-        child: GestureDetector(
-          onTap: () async {
+      spans.add(TextSpan(
+        text: url,
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          decoration: TextDecoration.underline,
+          decorationColor: theme.colorScheme.primary,
+        ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () async {
             final uri = Uri.tryParse(url);
             if (uri != null && await canLaunchUrl(uri)) {
               await launchUrl(uri);
             }
           },
-          child: Text(
-            url,
-            style: TextStyle(
-              color: theme.colorScheme.primary,
-              decoration: TextDecoration.underline,
-              decorationColor: theme.colorScheme.primary,
-            ),
-          ),
-        ),
       ));
       lastEnd = match.end;
     }
@@ -904,7 +907,7 @@ class _MessageBubbleState extends State<MessageBubble>
       int matchedLength;
       if (matchType == 'bareUrl') {
         matchedLength = matchLen!;
-        matchUrl = matchContent; // For bare URLs, the URL is the matched text itself
+        matchUrl = matchContent;
       } else {
         matchedLength = _matchLen(matchType, matchContent, matchUrl);
       }
@@ -933,13 +936,13 @@ class _MessageBubbleState extends State<MessageBubble>
         case 'code':
           final codeTextColor = textColor.withOpacity(0.9);
           spans.add(TextSpan(
-            text: matchContent,
             style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 12.5,
               color: codeTextColor,
               backgroundColor: isDark ? Colors.white10 : Colors.black12,
             ),
+            children: _parseUrls(matchContent, theme),
           ));
           break;
         case 'link':
@@ -979,12 +982,12 @@ class _MessageBubbleState extends State<MessageBubble>
       }
     }
 
-    return RichText(
-      textAlign: align ?? TextAlign.start,
-      text: TextSpan(
+    return SelectableText.rich(
+      TextSpan(
         children: spans,
         style: TextStyle(fontSize: 14.5, height: 1.6, fontWeight: FontWeight.w300, letterSpacing: 0.1, color: textColor),
       ),
+      textAlign: align ?? TextAlign.start,
     );
   }
 }
