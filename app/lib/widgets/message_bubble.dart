@@ -817,6 +817,41 @@ class _MessageBubbleState extends State<MessageBubble>
     }
   }
 
+  List<InlineSpan> _parseUrls(String text, ThemeData theme) {
+    final spans = <InlineSpan>[];
+    final urlRegex = RegExp(r'(https?://[^\s<>*\[\]\"\)]+)');
+    int lastEnd = 0;
+    for (final match in urlRegex.allMatches(text)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+      final url = match.group(1)!;
+      spans.add(WidgetSpan(
+        child: GestureDetector(
+          onTap: () async {
+            final uri = Uri.tryParse(url);
+            if (uri != null && await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+            }
+          },
+          child: Text(
+            url,
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: theme.colorScheme.primary,
+            ),
+          ),
+        ),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+    return spans;
+  }
+
   Widget _parseInlineMarkdown(String text, ThemeData theme, Color textColor, {TextAlign? align}) {
     final spans = <InlineSpan>[];
     final isDark = theme.brightness == Brightness.dark;
@@ -878,20 +913,20 @@ class _MessageBubbleState extends State<MessageBubble>
       switch (matchType) {
         case 'bold':
           spans.add(TextSpan(
-            text: matchContent,
             style: const TextStyle(fontWeight: FontWeight.bold),
+            children: _parseUrls(matchContent, theme),
           ));
           break;
         case 'italic':
           spans.add(TextSpan(
-            text: matchContent,
             style: const TextStyle(fontStyle: FontStyle.italic),
+            children: _parseUrls(matchContent, theme),
           ));
           break;
         case 'strike':
           spans.add(TextSpan(
-            text: matchContent,
             style: const TextStyle(decoration: TextDecoration.lineThrough),
+            children: _parseUrls(matchContent, theme),
           ));
           break;
         case 'code':
