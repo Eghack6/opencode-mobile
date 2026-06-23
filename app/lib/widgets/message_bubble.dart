@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -930,68 +931,49 @@ class _MessageBubbleState extends State<MessageBubble>
           ));
           break;
         case 'code':
-          final codeBg = isDark ? Colors.white10 : Colors.black12;
           final codeTextColor = textColor.withOpacity(0.9);
-          spans.add(WidgetSpan(
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: codeBg,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: textColor.withOpacity(0.1),
-                ),
-              ),
-              child: Text(
-                matchContent,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12.5,
-                  color: codeTextColor,
-                ),
-              ),
+          spans.add(TextSpan(
+            text: matchContent,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 12.5,
+              color: codeTextColor,
+              backgroundColor: isDark ? Colors.white10 : Colors.black12,
             ),
           ));
           break;
         case 'link':
-          spans.add(WidgetSpan(
-            child: GestureDetector(
-              onTap: () async {
+          spans.add(TextSpan(
+            text: matchContent,
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: theme.colorScheme.primary,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () async {
                 final uri = Uri.tryParse(matchUrl ?? '');
                 if (uri != null && await canLaunchUrl(uri)) {
                   await launchUrl(uri);
                 }
               },
-              child: Text(
-                matchContent,
-                style: TextStyle(
-                  color: theme.colorScheme.primary,
-                  decoration: TextDecoration.underline,
-                  decorationColor: theme.colorScheme.primary,
-                ),
-              ),
-            ),
           ));
           break;
         case 'bareUrl':
-          spans.add(WidgetSpan(
-            child: GestureDetector(
-              onTap: () async {
+          spans.add(TextSpan(
+            text: matched,
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: theme.colorScheme.primary,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () async {
                 final uri = Uri.tryParse(matchUrl ?? '');
                 if (uri != null && await canLaunchUrl(uri)) {
                   await launchUrl(uri);
                 }
               },
-              child: Text(
-                matched,
-                style: TextStyle(
-                  color: theme.colorScheme.primary,
-                  decoration: TextDecoration.underline,
-                  decorationColor: theme.colorScheme.primary,
-                ),
-              ),
-            ),
           ));
           break;
       }

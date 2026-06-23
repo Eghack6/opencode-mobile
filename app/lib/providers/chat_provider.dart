@@ -777,6 +777,22 @@ class ChatProvider extends ChangeNotifier {
   Future<void> onAppResumed() async {
     if (!_isConnected || !_initialized) return;
     _log('app resumed -> refreshing');
+
+    // SSH tunnel socket may have been killed by Android while in background.
+    // Wait briefly so dartssh2 can detect the dead connection and update status.
+    if (_useSshTunnel && _sshTunnel.status == SshTunnelStatus.connected) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      // If the tunnel silently died, _checkAndConnect will handle reconnect
+      if (_sshTunnel.status != SshTunnelStatus.connected) {
+        _log('app resumed: SSH tunnel dead, waiting for reconnect...');
+        await _sshTunnel.onStatusChanged
+            .where((s) => s == SshTunnelStatus.connected)
+            .first
+            .timeout(const Duration(seconds: 15));
+        _log('app resumed: SSH tunnel reconnected');
+      }
+    }
+
     _restartPolling();
     // Refresh session list (other device may have created/deleted sessions)
     await loadSessions();
