@@ -826,7 +826,7 @@ class _MessageBubbleState extends State<MessageBubble>
     final inlineCode = RegExp(r'`(.+?)`');
     final strike = RegExp(r'~~(.+?)~~');
     final link = RegExp(r'\[([^\]]+)\]\(([^)]+)\)');
-    final bareUrl = RegExp(r'https?://[^\s<>\[\]\"\)]+');
+    final bareUrl = RegExp(r'(https?://[^\s<>*\[\]\"\)]+)');
 
     String remaining = text;
     while (remaining.isNotEmpty) {
