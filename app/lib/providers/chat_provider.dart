@@ -159,6 +159,20 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<bool> connect(String serverUrl) async {
+    // Clear old state before switching connections
+    _currentSession = null;
+    _sessionMessages.clear();
+    _streamingMessages.clear();
+    _generatingSessions.clear();
+    _generationTimers.clear();
+    _generationDone.clear();
+    _abortedSessions.clear();
+    _sessionFailedMessages.clear();
+    _eventSubscription?.cancel();
+    _eventSubscription = null;
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+
     if (_useSshTunnel) {
       await _sshTunnel.disconnect();
       final config = await SshConfig.load();

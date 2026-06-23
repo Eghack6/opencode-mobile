@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +35,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
   final _imagePicker = ImagePicker();
   String? _pendingImageBase64;
   String? _pendingImageMime;
+  Uint8List? _pendingImageBytes;
   final _itemScrollController = ItemScrollController();
   final _itemPositionsListener = ItemPositionsListener.create();
   bool _autoScroll = true;
@@ -207,6 +209,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     final bytes = await file.readAsBytes();
     final mimeType = lookupMimeType(file.path) ?? 'image/jpeg';
     setState(() {
+      _pendingImageBytes = bytes;
       _pendingImageBase64 = base64Encode(bytes);
       _pendingImageMime = mimeType;
     });
@@ -229,6 +232,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
       setState(() {
         _pendingImageBase64 = null;
         _pendingImageMime = null;
+        _pendingImageBytes = null;
       });
     }
     _autoScroll = true;
@@ -1593,7 +1597,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
   }
 
   Widget _buildImagePreview() {
-    if (_pendingImageBase64 == null) return const SizedBox.shrink();
+    if (_pendingImageBytes == null) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Stack(
@@ -1604,7 +1608,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 150, maxWidth: 200),
               child: Image.memory(
-                base64Decode(_pendingImageBase64!),
+                _pendingImageBytes!,
                 fit: BoxFit.cover,
               ),
             ),
@@ -1617,6 +1621,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                 setState(() {
                   _pendingImageBase64 = null;
                   _pendingImageMime = null;
+                  _pendingImageBytes = null;
                 });
               },
               child: Container(
@@ -1670,124 +1675,129 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
                             width: 1,
                           ),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_pendingImageBase64 != null)
-                        _buildImagePreview(),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // TextField
-                          Expanded(
-                            child: TextField(
-                          controller: _textController,
-                          focusNode: _focusNode,
-                          enabled: provider.isConnected,
-                          decoration: InputDecoration(
-                            hintText: provider.isConnected
-                                ? '输入消息...'
-                                : '请先连接服务器...',
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            filled: false,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 22, vertical: 12),
-                          ),
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w300,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                          maxLines: 6,
-                          minLines: 1,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: !provider.isConnected || provider.isGenerating
-                              ? null
-                              : (_) => _sendMessage(),
-                        ),
-                        ),
-                          // Image picker button
-                          if (provider.isConnected)
-                            IconButton(
-                              icon: Icon(Icons.image_outlined,
-                                  size: 20,
-                                  color: theme.colorScheme.onSurface.withOpacity(0.5)),
-                              onPressed: provider.isGenerating ? null : _pickImage,
-                              tooltip: '添加图片',
-                              style: IconButton.styleFrom(
-                                minimumSize: const Size(36, 36),
-                              ),
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    alignment: Alignment.bottomCenter,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_pendingImageBytes != null)
+                          _buildImagePreview(),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // TextField
+                            Expanded(
+                              child: TextField(
+                            controller: _textController,
+                            focusNode: _focusNode,
+                            enabled: provider.isConnected,
+                            decoration: InputDecoration(
+                              hintText: provider.isConnected
+                                  ? '输入消息...'
+                                  : '请先连接服务器...',
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              filled: false,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 22, vertical: 12),
                             ),
-                          // Send / Stop button (outside TextField so it's always tappable)
-                      GestureDetector(
-                        onTap: !provider.isConnected
-                            ? null
-                            : (provider.isGenerating
-                                ? () => provider.abortGeneration()
-                                : _sendMessage),
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: provider.isGenerating
-                              ? Container(
-                                  width: 28,
-                                  height: 28,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: const Color(0xFFE74C3C).withOpacity(0.15),
-                                    border: Border.all(
-                                      color: const Color(0xFFE74C3C).withOpacity(0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Center(
-                                    child: Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE74C3C),
-                                        borderRadius: BorderRadius.circular(2.5),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w300,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            maxLines: 6,
+                            minLines: 1,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: !provider.isConnected || provider.isGenerating
+                                ? null
+                                : (_) => _sendMessage(),
+                          ),
+                          ),
+                            // Image picker button
+                            if (provider.isConnected)
+                              IconButton(
+                                icon: Icon(Icons.image_outlined,
+                                    size: 20,
+                                    color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                                onPressed: provider.isGenerating ? null : _pickImage,
+                                tooltip: '添加图片',
+                                style: IconButton.styleFrom(
+                                  minimumSize: const Size(36, 36),
+                                ),
+                              ),
+                            // Send / Stop button (outside TextField so it's always tappable)
+                        GestureDetector(
+                          onTap: !provider.isConnected
+                              ? null
+                              : (provider.isGenerating
+                                  ? () => provider.abortGeneration()
+                                  : _sendMessage),
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: provider.isGenerating
+                                ? Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFFE74C3C).withOpacity(0.15),
+                                      border: Border.all(
+                                        color: const Color(0xFFE74C3C).withOpacity(0.3),
+                                        width: 1,
                                       ),
                                     ),
+                                    child: Center(
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE74C3C),
+                                          borderRadius: BorderRadius.circular(2.5),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: provider.isConnected
+                                          ? GlassColors.primaryGradient
+                                          : null,
+                                      color: !provider.isConnected
+                                          ? theme.colorScheme.onSurface.withOpacity(0.1)
+                                          : null,
+                                      boxShadow: provider.isConnected
+                                          ? [
+                                              BoxShadow(
+                                                color: GlassColors.primaryStart.withOpacity(0.25),
+                                                blurRadius: 6,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Icon(
+                                      Icons.arrow_upward,
+                                      size: 13,
+                                      color: provider.isConnected
+                                          ? Colors.white
+                                          : theme.colorScheme.onSurface.withOpacity(0.3),
+                                    ),
                                   ),
-                                )
-                              : Container(
-                                  width: 28,
-                                  height: 28,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: provider.isConnected
-                                        ? GlassColors.primaryGradient
-                                        : null,
-                                    color: !provider.isConnected
-                                        ? theme.colorScheme.onSurface.withOpacity(0.1)
-                                        : null,
-                                    boxShadow: provider.isConnected
-                                        ? [
-                                            BoxShadow(
-                                              color: GlassColors.primaryStart.withOpacity(0.25),
-                                              blurRadius: 6,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Icon(
-                                    Icons.arrow_upward,
-                                    size: 13,
-                                    color: provider.isConnected
-                                        ? Colors.white
-                                        : theme.colorScheme.onSurface.withOpacity(0.3),
-                                  ),
-                                ),
+                          ),
                         ),
-                      ),
+                      ],
+                    ),
                     ],
                   ),
-                  ],
                 ),
               ),
             ),

@@ -722,9 +722,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (!mounted) return;
     if (connected) {
-      // Switching to a different server – create a new session so that
-      // replies from connection B don't appear in connection A's session.
-      await provider.createSession();
       showToast(context, '已连接「${config.name}」', bgColor: Colors.green);
       Navigator.pop(context); // back to chat
     } else {
