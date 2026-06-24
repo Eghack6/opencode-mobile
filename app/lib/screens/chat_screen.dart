@@ -259,8 +259,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     _autoScroll = false;
     _programmaticScroll = true;
     final msgIdx = indices[pairIndex];
+    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight + 4;
+    final viewportHeight = MediaQuery.of(context).size.height;
+    final align = topPadding / viewportHeight;
     _itemScrollController.scrollTo(
       index: msgIdx,
+      alignment: align,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
