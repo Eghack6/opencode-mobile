@@ -16,36 +16,15 @@ class ReasonBlock extends StatefulWidget {
 
 class _ReasonBlockState extends State<ReasonBlock>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-  late Animation<double> _opacity;
   late bool _expanded;
 
   @override
   void initState() {
     super.initState();
     _expanded = widget.defaultExpanded;
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-      value: _expanded ? 1.0 : 0.0,
-    );
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic);
-    _opacity = Tween<double>(begin: 0, end: 1).animate(_animation);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 
   void _toggle() {
-    if (_expanded) {
-      _controller.reverse();
-    } else {
-      _controller.forward();
-    }
     setState(() => _expanded = !_expanded);
   }
 
@@ -56,7 +35,6 @@ class _ReasonBlockState extends State<ReasonBlock>
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: isDark
             ? Colors.amber.withOpacity(0.08)
@@ -66,9 +44,11 @@ class _ReasonBlockState extends State<ReasonBlock>
           color: isDark ? Colors.amber.withOpacity(0.2) : Colors.amber.withOpacity(0.15),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
           InkWell(
             onTap: _toggle,
             child: Padding(
@@ -99,33 +79,30 @@ class _ReasonBlockState extends State<ReasonBlock>
               ),
             ),
           ),
-          ClipRect(
-            child: AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                return Align(
-                  alignment: Alignment.topCenter,
-                  heightFactor: _animation.value.clamp(0.0, 1.0),
-                  child: Opacity(
-                    opacity: _opacity.value,
-                    child: child,
-                  ),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-                child: SelectableText(
-                  widget.content,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: theme.colorScheme.onSurface.withOpacity(0.65),
-                  ),
-                ),
-              ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: _expanded ? 1.0 : 0.0,
+              child: _expanded
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                      child: SelectableText(
+                        widget.content,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: theme.colorScheme.onSurface.withOpacity(0.65),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(height: 0),
             ),
           ),
         ],
+      ),
       ),
     );
   }

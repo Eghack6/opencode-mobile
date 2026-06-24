@@ -2,11 +2,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../app.dart';
 import '../models/connection_config.dart';
 import '../providers/chat_provider.dart';
 import '../services/ssh_tunnel_service.dart';
 import '../services/theme_provider.dart';
+import '../services/update_service.dart';
 import '../widgets/toast.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -31,6 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _useSsh = false;
   bool _obscurePassword = true;
   bool _obscureKey = true;
+  bool _checkingUpdate = false;
+  String? _appVersion;
   ThemeMode _themeMode = ThemeMode.system;
   List<ConnectionConfig> _savedConfigs = [];
 
@@ -49,6 +54,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _configNameController = TextEditingController();
     _loadConfig();
     _loadSavedConfigs();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final pkg = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _appVersion = pkg.version);
+  }
+
+  Future<void> _checkUpdate() async {
+    setState(() => _checkingUpdate = true);
+    final service = UpdateService();
+    final info = await service.checkForUpdate();
+    if (!mounted) return;
+    setState(() => _checkingUpdate = false);
+
+    if (info.error != null) {
+      showToast(context, info.error!, bgColor: Colors.orange);
+      return;
+    }
+
+    if (!info.hasUpdate) {
+      showToast(context, '当前已是最新版本 (v${info.currentVersion})',
+          bgColor: Colors.green);
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('发现新版本 v${info.latestVersion}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('当前版本: v${info.currentVersion}'),
+              const SizedBox(height: 8),
+              if (info.releaseNotes != null && info.releaseNotes!.isNotEmpty)
+                Text(
+                  info.releaseNotes!,
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 10,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('稍后再说'),
+          ),
+          if (info.downloadUrl != null)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                launchUrl(Uri.parse(info.downloadUrl!),
+                    mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('下载 APK'),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadConfig() async {
@@ -607,8 +679,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _infoRow(theme, '应用', 'OpenCode Mobile'),
-            _infoRow(theme, '版本', '1.0.0'),
+            _infoRow(theme, '版本', _appVersion != null ? 'v$_appVersion' : '加载中...'),
+            _infoRow(theme, '作者', 'Eghack6'),
             _infoRow(theme, '架构', 'Flutter + opencode serve + SSH'),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _checkingUpdate ? null : _checkUpdate,
+                icon: _checkingUpdate
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.system_update_outlined, size: 18),
+                label: Text(_checkingUpdate ? '检查中...' : '检查更新'),
+              ),
+            ),
           ],
         ),
       ),

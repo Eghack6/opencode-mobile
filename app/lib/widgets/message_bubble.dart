@@ -215,16 +215,23 @@ class _MessageBubbleState extends State<MessageBubble>
                             ..._buildParts(context, theme, isUser),
                           ],
                         )
-                      : ClipRRect(
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(20),
-                            topRight: const Radius.circular(20),
-                            bottomLeft: const Radius.circular(6),
-                            bottomRight: const Radius.circular(20),
-                          ),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: _cursorController != null
+                      : Stack(
+                          children: [
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.only(
+                                  topLeft: const Radius.circular(20),
+                                  topRight: const Radius.circular(20),
+                                  bottomLeft: const Radius.circular(6),
+                                  bottomRight: const Radius.circular(20),
+                                ),
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                  child: Container(color: Colors.transparent),
+                                ),
+                              ),
+                            ),
+                            _cursorController != null
                                 ? AnimatedBuilder(
                                     animation: _cursorController!,
                                     builder: (context, _) => Column(
@@ -238,7 +245,7 @@ class _MessageBubbleState extends State<MessageBubble>
                                       ..._buildParts(context, theme, isUser),
                                     ],
                                   ),
-                          ),
+                          ],
                         ),
                 ),
                 // Timestamp
