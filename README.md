@@ -394,3 +394,9 @@ opencode-mobile-clean/
 | 实时事件 | `GET /global/event` (SSE) |
 | 中止生成 | `POST /session/:id/abort` |
 | 获取模型 | `GET /provider` |
+
+---
+
+## 开源协议
+
+本项目基于 [GNU General Public License v3.0](LICENSE) 开源。
