@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:http/http.dart' as http;
 import '../app.dart';
 import '../models/connection_config.dart';
 import '../providers/chat_provider.dart';
@@ -112,15 +115,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
             FilledButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                launchUrl(Uri.parse(info.downloadUrl!),
-                    mode: LaunchMode.externalApplication);
+                _downloadAndInstall(info.downloadUrl!);
               },
               icon: const Icon(Icons.download, size: 18),
-              label: const Text('下载 APK'),
+              label: const Text('下载并安装'),
             ),
         ],
       ),
     );
+  }
+
+  Future<void> _downloadAndInstall(String url) async {
+    showToast(context, '正在下载更新...', bgColor: Colors.blue);
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200) {
+        showToast(context, '下载失败 ($response.statusCode)', bgColor: Colors.red);
+        return;
+      }
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/opencode-mobile-v1.5.0.apk');
+      await file.writeAsBytes(response.bodyBytes);
+
+      if (!mounted) return;
+      showToast(context, '下载完成，正在安装...', bgColor: Colors.blue);
+
+      final result = await OpenFilex.open(file.path);
+      if (result.type != ResultType.done) {
+        showToast(context, '无法打开安装包，请在文件管理器中手动安装',
+            bgColor: Colors.orange);
+      }
+    } catch (e) {
+      if (mounted) {
+        showToast(context, '下载失败：$e', bgColor: Colors.red);
+      }
+    }
   }
 
   Future<void> _loadConfig() async {
