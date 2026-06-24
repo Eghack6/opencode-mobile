@@ -7,6 +7,7 @@ enum EventType {
   serverConnected,
   messageStart,
   messageDelta,
+  messageUpdated,
   messageDone,
   messageError,
   toolStart,
@@ -75,7 +76,10 @@ class EventService {
                 }
               } catch (_) {}
             }
-            dataBuffer = StringBuffer(dataStr);
+            if (dataBuffer.isNotEmpty) {
+              dataBuffer.write('\n');
+            }
+            dataBuffer.write(dataStr);
           } else if (line.isEmpty && dataBuffer.isNotEmpty) {
             _processEvent(currentEvent, dataBuffer.toString());
             currentEvent = '';
@@ -157,13 +161,14 @@ class EventService {
       case 'server.connected':
         return EventType.serverConnected;
       case 'message.part.delta':
-      case 'message.part.updated':
-      case 'message.updated':
       case 'message.delta':
       case 'stream.delta':
       case 'content.delta':
       case 'text.delta':
         return EventType.messageDelta;
+      case 'message.part.updated':
+      case 'message.updated':
+        return EventType.messageUpdated;
       case 'session.idle':
       case 'message.done':
       case 'message.complete':

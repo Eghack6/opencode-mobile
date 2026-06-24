@@ -325,6 +325,15 @@ class ChatProvider extends ChangeNotifier {
     switch (event.type) {
       case EventType.serverConnected:
         _log('SSE: server connected');
+        // On reconnection, if sessions are still generating, the server may
+        // replay events from the beginning. Clear streaming state so that
+        // replayed deltas rebuild content from scratch instead of duplicating.
+        if (_generatingSessions.isNotEmpty) {
+          _log('SSE: clearing streaming state for ${_generatingSessions.length} generating session(s) on reconnect');
+          for (final sid in _generatingSessions) {
+            _streamingMessages.remove(sid);
+          }
+        }
         break;
       case EventType.messageDelta:
         // Extract which session this delta belongs to
@@ -378,6 +387,61 @@ class ChatProvider extends ChangeNotifier {
 
           // Only notify if this is the currently viewed session
           if (_currentSession?.id == eventSessionId) {
+            notifyListeners();
+          }
+        }
+        break;
+      case EventType.messageUpdated:
+        // message.updated / message.part.updated contains FULL content, not delta
+        // Replace streaming message content instead of appending
+        String? updatedSessionId = event.data['sessionID'] as String?
+            ?? event.data['sessionId'] as String?
+            ?? event.data['_sessionId'] as String?;
+        if (updatedSessionId == null || updatedSessionId.isEmpty) {
+          if (_generatingSessions.length == 1) {
+            updatedSessionId = _generatingSessions.first;
+          }
+        }
+        if (updatedSessionId == null || updatedSessionId.isEmpty) break;
+
+        final fullContent = event.data['delta'] as String? ??
+            event.data['content'] as String? ??
+            event.data['text'] as String? ??
+            '';
+        if (fullContent.isNotEmpty) {
+          final sessionMsgs = _sessionMessages.putIfAbsent(updatedSessionId, () => []);
+          var streaming = _streamingMessages[updatedSessionId];
+          if (streaming != null) {
+            // Replace content, not append
+            final updatedParts = [Part(type: 'text', content: fullContent)];
+            streaming = Message(
+              id: streaming.id,
+              sessionId: streaming.sessionId,
+              role: 'assistant',
+              parts: updatedParts,
+              createdAt: streaming.createdAt,
+            );
+          } else {
+            streaming = Message(
+              id: 'streaming_${DateTime.now().millisecondsSinceEpoch}',
+              sessionId: updatedSessionId,
+              role: 'assistant',
+              parts: [Part(type: 'text', content: fullContent)],
+              createdAt: DateTime.now(),
+            );
+          }
+          _streamingMessages[updatedSessionId] = streaming;
+
+          final msgs = List<Message>.from(sessionMsgs);
+          final existIdx = msgs.indexWhere((m) => m.id == streaming!.id);
+          if (existIdx >= 0) {
+            msgs[existIdx] = streaming;
+          } else {
+            msgs.add(streaming);
+          }
+          _sessionMessages[updatedSessionId] = msgs;
+
+          if (_currentSession?.id == updatedSessionId) {
             notifyListeners();
           }
         }

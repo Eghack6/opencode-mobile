@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,6 +53,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
 
   _DeployOption? _deployOption;
   late AnimationController _borderAnimController;
+  DateTime? _lastBackPressTime;
 
   @override
   void initState() {
@@ -876,16 +878,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
     showToast(context, message, bgColor: bgColor);
   }
 
+  void _onPopInvokedWithResult(bool didPop, dynamic result) {
+    if (didPop) return;
+    final now = DateTime.now();
+    if (_lastBackPressTime != null &&
+        now.difference(_lastBackPressTime!).inMilliseconds < 2000) {
+      SystemNavigator.pop();
+    } else {
+      _lastBackPressTime = now;
+      showToast(context, '再次返回退出 OpenCode Mobile', bgColor: Colors.grey);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: isDark ? GlassColors.darkBgGradient : GlassColors.lightBgGradient,
-      ),
-      child: Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _onPopInvokedWithResult,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: isDark ? GlassColors.darkBgGradient : GlassColors.lightBgGradient,
+        ),
+        child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: true,
         resizeToAvoidBottomInset: true,
@@ -1107,6 +1124,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, Ti
           );
         },
       ),
+    ),
     ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 
 enum SshTunnelStatus {
   disconnected,
@@ -115,8 +116,10 @@ class SshTunnelService {
   SshConfig? _config;
   int _retryCount = 0;
   Timer? _reconnectTimer;
-  static const int _maxRetries = 3;
-  static const List<int> _retryDelays = [2, 5, 10];
+  Timer? _heartbeatTimer;
+  http.Client? _httpClient;
+  static const int _maxRetries = 10;
+  static const Duration _heartbeatInterval = Duration(seconds: 15);
 
   SshTunnelStatus get status => _status;
   String? get lastError => _lastError;
@@ -133,9 +136,18 @@ class SshTunnelService {
     _statusController.add(status);
   }
 
+  int _retryDelay(int attempt) {
+    final delay = Duration(seconds: [2, 4, 8, 16, 30].elementAt(attempt).clamp(1, 30));
+    return delay.inSeconds;
+  }
+
   Future<bool> connect(SshConfig config, {bool autoRetry = true}) async {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _httpClient?.close();
+    _httpClient = http.Client();
     if (_status == SshTunnelStatus.connected) await disconnect();
     _config = config;
     _lastError = null;
@@ -170,6 +182,8 @@ class SshTunnelService {
 
       _client!.done.then((_) {
         if (_status == SshTunnelStatus.connected) {
+          _heartbeatTimer?.cancel();
+          _heartbeatTimer = null;
           _lastError = 'SSH connection lost';
           _setStatus(SshTunnelStatus.failed);
           if (autoRetry) _scheduleReconnect();
@@ -191,6 +205,7 @@ class SshTunnelService {
 
       _retryCount = 0;
       _setStatus(SshTunnelStatus.connected);
+      _startHeartbeat();
       return true;
     } catch (e) {
       _lastError = e.toString();
@@ -201,9 +216,35 @@ class SshTunnelService {
     }
   }
 
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) => _checkHealth());
+  }
+
+  Future<void> _checkHealth() async {
+    if (_status != SshTunnelStatus.connected || _localPort == null) return;
+    try {
+      final url = Uri.parse('http://127.0.0.1:$_localPort/global/health');
+      final response = await _httpClient!.get(url).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) return;
+      _lastError = 'Heartbeat failed: status ${response.statusCode}';
+    } catch (e) {
+      _lastError = 'Heartbeat failed: $e';
+    }
+    // Heartbeat failed — trigger reconnect
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _setStatus(SshTunnelStatus.failed);
+    _scheduleReconnect();
+  }
+
   void _scheduleReconnect() {
-    if (_retryCount >= _maxRetries) return;
-    final delay = _retryDelays[_retryCount.clamp(0, _retryDelays.length - 1)];
+    if (_retryCount >= _maxRetries) {
+      _lastError = 'Max retries ($_maxRetries) reached';
+      _setStatus(SshTunnelStatus.failed);
+      return;
+    }
+    final delay = _retryDelay(_retryCount);
     _retryCount++;
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(seconds: delay), () async {
@@ -269,6 +310,10 @@ class SshTunnelService {
   }
 
   Future<void> disconnect() async {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _httpClient?.close();
+    _httpClient = null;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _retryCount = 0;
@@ -301,6 +346,8 @@ class SshTunnelService {
   }
 
   void dispose() {
+    _heartbeatTimer?.cancel();
+    _httpClient?.close();
     _reconnectTimer?.cancel();
     _cleanup();
     _statusController.close();
